@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+
+# Booking-specific URLs include personal session params; prefer the catalogue.
+Disallow: /booking?
+
+# Sitemap (placeholder — replace with the deployment URL when published).
+# Sitemap: https://example.org/sitemap.xml
