@@ -64,6 +64,14 @@ export type SlotRow = {
   remaining: number
 }
 
+export type TravelerProfileRow = {
+  id: string
+  display_name: string | null
+  profile_json: string
+  created_at: string
+  updated_at: string
+}
+
 const parseJsonArray = <T>(value: string | null | undefined, fallback: T[] = []) => {
   if (!value) return fallback
   try {
@@ -187,10 +195,19 @@ export const initializeDatabase = () => {
       last_service_update TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS traveler_profiles (
+      id TEXT PRIMARY KEY,
+      display_name TEXT,
+      profile_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_ticket_types_spot ON ticket_types(scenic_spot_id);
     CREATE INDEX IF NOT EXISTS idx_booking_slots_spot ON booking_slots(scenic_spot_id);
     CREATE INDEX IF NOT EXISTS idx_booking_orders_slot ON booking_orders(slot_id);
     CREATE INDEX IF NOT EXISTS idx_booking_orders_status ON booking_orders(status);
+    CREATE INDEX IF NOT EXISTS idx_traveler_profiles_updated ON traveler_profiles(updated_at);
   `)
 
   ensureTagsColumn()

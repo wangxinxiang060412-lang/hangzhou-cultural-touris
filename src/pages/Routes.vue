@@ -1,17 +1,41 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import ArchiveHeader from '../components/common/ArchiveHeader.vue'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
 import { hotelOrigins, routePlanningLabels, routePlans } from '../data/routePlanning'
+import type { ThemeJourneyFilter } from '../data/themeJourneys'
 import { routes } from '../data/routes'
+import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, pickLocalizedList, t } from '../i18n/site'
+import { cityPasses, ensureCatalog, scenicSpots } from '../stores/catalog'
+import { ensureDiscovery, neighborhoods, themeJourneys } from '../stores/discovery'
 import { buildBookingPath, buildSpotDetailPath, findSpotIdFromText } from '../utils/scenicSpotLookup'
+
+const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
+  'zh-CN': zh,
+  'en-US': en,
+  'ja-JP': ja,
+  'ko-KR': ko,
+})
 
 const getPrimarySpotId = (primaryStopText: string) => findSpotIdFromText(primaryStopText)
 const activeRouteId = ref(routes[0]?.id ?? '')
 const selectedOriginId = ref(hotelOrigins[0]?.id ?? '')
 const selectedStopId = ref('')
+const activeJourneyFilter = ref<ThemeJourneyFilter | 'all'>('all')
+
+const journeyFilters: Array<{ id: ThemeJourneyFilter | 'all'; label: LocalizedText }> = [
+  { id: 'all', label: text('全部', 'All', 'すべて', '전체') },
+  { id: 'family', label: text('亲子', 'Family', '家族', '가족') },
+  { id: 'photography', label: text('摄影', 'Photography', '写真', '사진') },
+  { id: 'food', label: text('美食', 'Food', '食', '미식') },
+  { id: 'accessible', label: text('无障碍', 'Accessible', 'バリアフリー', '무장애') },
+  { id: 'heritage', label: text('文化', 'Heritage', '文化', '문화') },
+  { id: 'night', label: text('夜游', 'Night', '夜', '야간') },
+]
+const getJourneyFilterLabel = (filterId: ThemeJourneyFilter) =>
+  pickLocalized(journeyFilters.find((item) => item.id === filterId)?.label ?? text(filterId, filterId, filterId, filterId))
 
 const activeRoute = computed(() => routes.find((route) => route.id === activeRouteId.value) ?? routes[0])
 const activePlan = computed(() => (activeRoute.value ? routePlans[activeRoute.value.id] : undefined))
@@ -29,6 +53,23 @@ const selectedStop = computed(() => {
 })
 const mapPolylinePoints = computed(() =>
   (activePlan.value?.stops ?? []).map((stop) => `${stop.x},${stop.y}`).join(' '),
+)
+const filteredThemeJourneys = computed(() => {
+  const list = themeJourneys.value
+  if (activeJourneyFilter.value === 'all') return list
+  return list.filter((journey) => journey.filters.includes(activeJourneyFilter.value as ThemeJourneyFilter))
+})
+const themeJourneyCards = computed(() =>
+  filteredThemeJourneys.value.map((journey) => ({
+    ...journey,
+    neighborhoods: journey.neighborhoodIds
+      .map((id) => neighborhoods.value.find((item) => item.id === id))
+      .filter((item) => Boolean(item)),
+    pass: cityPasses.value.find((pass) => pass.id === journey.cityPassId) ?? null,
+    spots: journey.spotIds
+      .map((id) => scenicSpots.value.find((spot) => spot.id === id))
+      .filter((spot) => Boolean(spot)),
+  })),
 )
 
 const setActiveRoute = (routeId: string) => {
@@ -48,6 +89,16 @@ const focusPlannerRoute = (routeId: string) => {
     document.getElementById('route-planner')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   })
 }
+
+const openJourneyRoute = (routeId?: string) => {
+  if (!routeId) return
+  focusPlannerRoute(routeId)
+}
+
+onMounted(() => {
+  void ensureCatalog()
+  void ensureDiscovery()
+})
 </script>
 
 <template>
@@ -219,6 +270,115 @@ const focusPlannerRoute = (routeId: string) => {
         </div>
       </section>
 
+      <section class="routes-themes" :aria-label="pickLocalized(text('主题旅程', 'Theme journeys', 'テーマ旅程', '테마 여정'))" data-reveal>
+        <div class="routes-themes__head">
+          <p class="routes-themes__eyebrow">{{ pickLocalized(text('主题旅程', 'Theme journeys', 'テーマ旅程', '테마 여정')) }}</p>
+          <div>
+            <h2>{{ pickLocalized(text('按场景选路线，而不是只看漫游', 'Choose by scenario, not just by route', 'ルートより場面で選ぶ', '루트보다 상황으로 고르기')) }}</h2>
+            <p>{{ pickLocalized(text('把“亲子 3 天”“摄影爱好者”“美食打卡”“无障碍出游”这种用户第一直觉会找的包装，直接变成可筛选的旅程卡片。', 'Turn common planning intents like family trips, photography, food and accessibility into filterable journeys.', '家族、写真、食、バリアフリーといった探し方をそのまま旅程にしています。', '가족, 사진, 미식, 무장애처럼 실제 사용자가 찾는 방식 자체를 여정으로 만들었습니다.')) }}</p>
+          </div>
+        </div>
+
+        <div class="routes-themes__filters" role="group" :aria-label="pickLocalized(text('主题筛选', 'Theme filters', 'テーマ絞り込み', '테마 필터'))">
+          <button
+            v-for="filter in journeyFilters"
+            :key="filter.id"
+            type="button"
+            class="routes-themes__filter"
+            :class="{ 'is-active': filter.id === activeJourneyFilter }"
+            @click="activeJourneyFilter = filter.id"
+          >
+            {{ pickLocalized(filter.label) }}
+          </button>
+        </div>
+
+        <div class="routes-themes__grid">
+          <article
+            v-for="journey in themeJourneyCards"
+            :id="`journey-${journey.id}`"
+            :key="journey.id"
+            class="journey-card"
+          >
+            <div class="journey-card__top">
+              <div>
+                <p class="journey-card__meta">{{ journey.titleEn }}</p>
+                <h3>{{ pickLocalized(journey.title) }}</h3>
+                <span>{{ pickLocalized(journey.duration) }} · {{ pickLocalized(journey.audience) }}</span>
+              </div>
+              <div class="journey-card__labels">
+                <span v-for="filter in journey.filters" :key="filter">{{ getJourneyFilterLabel(filter) }}</span>
+              </div>
+            </div>
+
+            <p class="journey-card__summary">{{ pickLocalized(journey.summary) }}</p>
+
+            <ol class="journey-card__days">
+              <li v-for="item in journey.dayPlans" :key="pickLocalized(item.label)">
+                <strong>{{ pickLocalized(item.label) }}</strong>
+                <span>{{ pickLocalized(item.plan) }}</span>
+              </li>
+            </ol>
+
+            <div class="journey-card__sections">
+              <article>
+                <span>{{ pickLocalized(text('对应街区', 'Neighbourhoods', '対応エリア', '해당 구역')) }}</span>
+                <div class="journey-card__chips">
+                  <RouterLink
+                    v-for="item in journey.neighborhoods"
+                    :key="item?.id"
+                    :to="`/neighborhoods#neighborhood-${item?.id}`"
+                  >
+                    {{ item ? pickLocalized(item.name) : '' }}
+                  </RouterLink>
+                </div>
+              </article>
+
+              <article>
+                <span>{{ pickLocalized(text('关联景点', 'Linked spots', '関連スポット', '연관 명소')) }}</span>
+                <div class="journey-card__chips">
+                  <RouterLink
+                    v-for="spot in journey.spots"
+                    :key="spot?.id"
+                    :to="`/scenic-spots/${spot?.id}`"
+                  >
+                    {{ spot?.nameZh }}
+                  </RouterLink>
+                </div>
+              </article>
+            </div>
+
+            <div class="journey-card__notes">
+              <article>
+                <span>{{ pickLocalized(text('无障碍 / 节奏', 'Pacing', '歩き方', '리듬')) }}</span>
+                <p>{{ pickLocalized(journey.accessibilityNote) }}</p>
+              </article>
+              <article>
+                <span>{{ pickLocalized(text('雨天方案', 'Rainy backup', '雨天案', '비 오는 날 대안')) }}</span>
+                <p>{{ pickLocalized(journey.rainyPlan) }}</p>
+              </article>
+            </div>
+
+            <div class="journey-card__actions">
+              <button
+                v-if="journey.routeIds[0]"
+                type="button"
+                class="journey-card__action"
+                @click="openJourneyRoute(journey.routeIds[0])"
+              >
+                {{ pickLocalized(text('看对应路线', 'Open route', 'ルートを見る', '해당 루트 보기')) }}
+              </button>
+              <RouterLink
+                v-if="journey.pass"
+                :to="`/booking?pass=${journey.pass.id}`"
+                class="journey-card__action"
+              >
+                {{ pickLocalized(journey.pass.shortLabel) }}
+              </RouterLink>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="routes-page__list" :aria-label="t('routes.aria')" data-reveal>
         <article
           v-for="route in routes"
@@ -318,6 +478,173 @@ const focusPlannerRoute = (routeId: string) => {
 .routes-page {
   background: var(--paper-light);
   color: var(--ink);
+}
+
+.routes-themes {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px clamp(20px, 3vw, 48px) 58px;
+}
+
+.routes-themes__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.routes-themes__eyebrow,
+.journey-card__meta,
+.journey-card__labels span,
+.journey-card__sections span,
+.journey-card__notes span {
+  color: rgba(16, 20, 18, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.routes-themes__head h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(30px, 3vw, 44px);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.routes-themes__head p:last-child {
+  max-width: 54rem;
+  margin-top: 14px;
+  color: rgba(16, 20, 18, 0.64);
+  line-height: 1.8;
+}
+
+.routes-themes__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.routes-themes__filter {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(16, 20, 18, 0.12);
+  background: rgba(250, 247, 240, 0.92);
+  color: rgba(16, 20, 18, 0.72);
+}
+
+.routes-themes__filter.is-active {
+  background: var(--ink);
+  color: #f6f1e8;
+  border-color: var(--ink);
+}
+
+.routes-themes__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.journey-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid rgba(16, 20, 18, 0.08);
+  background: rgba(250, 247, 240, 0.94);
+}
+
+.journey-card__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.journey-card__top h3 {
+  margin-top: 8px;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 2vw, 34px);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.journey-card__top > div > span {
+  display: block;
+  margin-top: 10px;
+  color: rgba(16, 20, 18, 0.58);
+  line-height: 1.7;
+}
+
+.journey-card__labels,
+.journey-card__chips,
+.journey-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.journey-card__labels span,
+.journey-card__chips a,
+.journey-card__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(16, 20, 18, 0.12);
+}
+
+.journey-card__summary,
+.journey-card__notes p {
+  color: rgba(16, 20, 18, 0.7);
+  line-height: 1.8;
+}
+
+.journey-card__summary {
+  font-family: var(--font-serif);
+}
+
+.journey-card__days {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journey-card__days li {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(16, 20, 18, 0.08);
+}
+
+.journey-card__sections,
+.journey-card__notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.journey-card__sections article,
+.journey-card__notes article {
+  display: grid;
+  gap: 10px;
+}
+
+.journey-card__action {
+  background: transparent;
+  color: var(--ink);
+}
+
+@media (max-width: 960px) {
+  .routes-themes__head,
+  .routes-themes__grid,
+  .journey-card__top,
+  .journey-card__sections,
+  .journey-card__notes {
+    grid-template-columns: 1fr;
+  }
 }
 
 .routes-page__hero,

@@ -20,6 +20,16 @@ import { fetchBookingSlots, fetchTicketTypes } from '../services/api'
 import type { ApiBookingSlot, ApiTicketType } from '../services/api'
 import { ensureCatalog, findScenicSpot } from '../stores/catalog'
 import { ensureOperationsFeed, getSpotOperationStatus, type OperationTone } from '../stores/operations'
+import {
+  addTripItem,
+  ensureTravelerProfile,
+  favoriteSpotIds,
+  markSpotViewed,
+  setSpotTravelStatus,
+  toggleFavoriteSpot,
+  visitedSpotIds,
+  wishedSpotIds,
+} from '../stores/traveler'
 import { formatLocalDate } from '../utils/date'
 import {
   localizeSpotAddress,
@@ -213,7 +223,18 @@ watch(
 onMounted(() => {
   void ensureCatalog()
   void ensureOperationsFeed()
+  void ensureTravelerProfile()
 })
+
+watch(
+  () => spot.value?.id,
+  (spotId) => {
+    if (spotId) {
+      markSpotViewed(spotId)
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -261,6 +282,34 @@ onMounted(() => {
                 <RouterLink class="detail-hero__action" :to="{ path: '/booking', query: { spot: spot.id } }">
                   {{ t('common.startReservation') }}
                 </RouterLink>
+                <button
+                  type="button"
+                  class="detail-hero__action detail-hero__action--muted"
+                  @click="toggleFavoriteSpot(spot.id)"
+                >
+                  {{ favoriteSpotIds.includes(spot.id) ? pickLocalized({ 'zh-CN': '已收藏', 'en-US': 'Saved', 'ja-JP': '保存済み', 'ko-KR': '저장됨' }) : pickLocalized({ 'zh-CN': '收藏', 'en-US': 'Favorite', 'ja-JP': '保存', 'ko-KR': '저장' }) }}
+                </button>
+                <button
+                  type="button"
+                  class="detail-hero__action detail-hero__action--muted"
+                  @click="setSpotTravelStatus(spot.id, wishedSpotIds.includes(spot.id) ? null : 'wish')"
+                >
+                  {{ wishedSpotIds.includes(spot.id) ? pickLocalized({ 'zh-CN': '已想去', 'en-US': 'On Wishlist', 'ja-JP': '行きたい済み', 'ko-KR': '가고 싶음 저장' }) : pickLocalized({ 'zh-CN': '想去', 'en-US': 'Want to Go', 'ja-JP': '行きたい', 'ko-KR': '가고 싶음' }) }}
+                </button>
+                <button
+                  type="button"
+                  class="detail-hero__action detail-hero__action--muted"
+                  @click="setSpotTravelStatus(spot.id, visitedSpotIds.includes(spot.id) ? null : 'visited')"
+                >
+                  {{ visitedSpotIds.includes(spot.id) ? pickLocalized({ 'zh-CN': '已去过', 'en-US': 'Visited', 'ja-JP': '訪問済み', 'ko-KR': '다녀옴' }) : pickLocalized({ 'zh-CN': '已去', 'en-US': 'Mark Visited', 'ja-JP': '訪問済みにする', 'ko-KR': '다녀옴으로 표시' }) }}
+                </button>
+                <button
+                  type="button"
+                  class="detail-hero__action detail-hero__action--muted"
+                  @click="addTripItem({ scenicSpotId: spot.id, note: localizeSpotName(spot) })"
+                >
+                  {{ pickLocalized({ 'zh-CN': '加入行程', 'en-US': 'Add to Trip', 'ja-JP': '旅程に追加', 'ko-KR': '일정에 추가' }) }}
+                </button>
                 <RouterLink class="detail-hero__action detail-hero__action--muted" to="/visit-guide">
                   {{ t('page.visitGuide') }}
                 </RouterLink>

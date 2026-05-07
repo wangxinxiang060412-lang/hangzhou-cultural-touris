@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ArchiveHeader from '../components/common/ArchiveHeader.vue'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
@@ -23,6 +24,7 @@ const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => 
   'ko-KR': ko,
 })
 
+const route = useRoute()
 const searchQuery = ref('')
 const selectedCategory = ref('全部')
 const selectedArea = ref('全部')
@@ -90,6 +92,14 @@ onMounted(() => {
   void ensureCatalog()
   void ensureOperationsFeed()
 })
+
+watch(
+  () => route.query.q,
+  (value) => {
+    searchQuery.value = typeof value === 'string' ? value : ''
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -230,9 +240,9 @@ onMounted(() => {
             :to="`/scenic-spots/${spot.id}`"
             :aria-label="t('scenic.card.viewDetailAria', { name: localizeSpotName(spot) })"
           >
-            <span class="scenic-card__id">{{ String(index + 1).padStart(2, '0') }}</span>
+            <div class="scenic-card__id">{{ String(index + 1).padStart(2, '0') }}</div>
 
-            <span class="scenic-card__media">
+            <figure class="scenic-card__media">
               <img
                 v-if="getSpotImage(spot.id)"
                 :src="getSpotImage(spot.id) ?? ''"
@@ -244,22 +254,22 @@ onMounted(() => {
               <span v-else class="scenic-card__placeholder" aria-hidden="true">
                 {{ spot.nameEn.slice(0, 2) }}
               </span>
-            </span>
+            </figure>
 
-            <span class="scenic-card__body">
-              <span class="scenic-card__topline">
+            <div class="scenic-card__body">
+              <div class="scenic-card__topline">
                 <span>{{ localizeSpotArea(spot) }}</span>
                 <span>{{ localizeSpotCategory(spot) }}</span>
-              </span>
+              </div>
               <strong class="scenic-card__title">{{ localizeSpotName(spot) }}</strong>
               <small>{{ spot.nameEn }}</small>
-              <span class="scenic-card__description">{{ localizeSpotDescription(spot) }}</span>
-              <span class="scenic-card__tags">
+              <div class="scenic-card__description">{{ localizeSpotDescription(spot) }}</div>
+              <div class="scenic-card__tags">
                 <span v-for="tag in localizeSpotTags(spot)" :key="tag">{{ tag }}</span>
-              </span>
-            </span>
+              </div>
+            </div>
 
-            <span class="scenic-card__state">
+            <div class="scenic-card__state">
               <span>{{ spot.reservationRequired ? t('state.reservationRequired') : t('state.openVisit') }}</span>
               <span>{{ spot.paid ? t('state.containsTickets') : t('state.freeOpen') }}</span>
 
@@ -272,7 +282,7 @@ onMounted(() => {
                 </span>
                 <span class="scenic-card__status-note">{{ pickLocalized(operationStatusOf(spot.id)!.highlight) }}</span>
               </template>
-            </span>
+            </div>
           </RouterLink>
 
           <!--
@@ -523,9 +533,11 @@ onMounted(() => {
 
 .scenic-card__main {
   display: grid;
-  grid-template-columns: 52px minmax(220px, 240px) minmax(0, 1fr) minmax(9rem, 0.28fr);
-  gap: clamp(20px, 3vw, 48px);
-  align-items: stretch;
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: 46px minmax(240px, 296px) minmax(18rem, 1fr) minmax(11rem, 13rem);
+  gap: clamp(18px, 2.4vw, 34px);
+  align-items: start;
   padding: clamp(22px, 2.8vw, 36px) 0;
   color: inherit;
 }
@@ -543,8 +555,13 @@ onMounted(() => {
 }
 
 .scenic-card__media {
+  position: relative;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  margin: 0;
   min-width: 0;
-  aspect-ratio: 4 / 2.6;
+  aspect-ratio: 4 / 2.45;
   overflow: hidden;
   border: 1px solid rgba(16, 20, 18, 0.08);
   background: rgba(216, 221, 214, 0.42);
@@ -577,11 +594,14 @@ onMounted(() => {
 }
 
 .scenic-card__body {
+  position: relative;
+  z-index: 1;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   align-content: start;
   min-width: 0;
-  padding-right: clamp(12px, 2vw, 28px);
+  padding-left: clamp(4px, 0.6vw, 10px);
+  padding-right: clamp(8px, 1.2vw, 20px);
 }
 
 .scenic-card__topline,
@@ -597,15 +617,19 @@ onMounted(() => {
 }
 
 .scenic-card__title {
+  display: block;
   color: inherit;
 }
 
 .scenic-card strong {
+  max-width: 18ch;
   font-family: var(--font-serif);
-  font-size: clamp(24px, 2.4vw, 36px);
+  font-size: clamp(22px, 2vw, 32px);
   font-weight: 400;
-  letter-spacing: 0.05em;
-  line-height: 1.12;
+  letter-spacing: 0.03em;
+  line-height: 1.18;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .scenic-card small {
@@ -616,15 +640,17 @@ onMounted(() => {
 }
 
 .scenic-card__description {
-  max-width: 34rem;
+  max-width: 32rem;
   color: rgba(16, 20, 18, 0.62);
   font-family: var(--font-serif);
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: 0.04em;
-  line-height: 1.85;
+  line-height: 1.75;
 }
 
 .scenic-card__state {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 10px;
   align-content: start;
@@ -749,7 +775,7 @@ onMounted(() => {
   }
 
   .scenic-card__main {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   }
 
   .scenic-card__state {

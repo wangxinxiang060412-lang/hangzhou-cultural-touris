@@ -40,6 +40,8 @@ const year = new Date().getFullYear()
             <li><button type="button" @click="goToAnchor('notices')">{{ t('footer.notices') }}</button></li>
             <li><button type="button" @click="goToAnchor('concept')">{{ t('footer.intro') }}</button></li>
             <li><button type="button" @click="goToAnchor('weather')">{{ t('footer.weather') }}</button></li>
+            <li><button type="button" @click="goToAnchor('neighborhoods')">{{ t('page.neighborhoods') }}</button></li>
+            <li><button type="button" @click="goToAnchor('events')">{{ t('page.events') }}</button></li>
             <li><button type="button" @click="goToAnchor('reservations')">{{ t('footer.reservations') }}</button></li>
             <li><button type="button" @click="goToAnchor('seasons')">{{ t('footer.seasons') }}</button></li>
             <li><button type="button" @click="goToAnchor('places')">{{ t('footer.places') }}</button></li>
@@ -53,6 +55,8 @@ const year = new Date().getFullYear()
           <ul>
             <li><RouterLink to="/">{{ t('page.home') }}</RouterLink></li>
             <li><RouterLink to="/scenic-spots">{{ t('nav.reservations') }}</RouterLink></li>
+            <li><RouterLink to="/neighborhoods">{{ t('page.neighborhoods') }}</RouterLink></li>
+            <li><RouterLink to="/events">{{ t('page.events') }}</RouterLink></li>
             <li><RouterLink to="/booking">{{ t('booking.title') }}</RouterLink></li>
             <li><RouterLink to="/orders">{{ t('page.orders') }}</RouterLink></li>
             <li><RouterLink to="/routes">{{ t('nav.routes') }}</RouterLink></li>

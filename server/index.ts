@@ -4,8 +4,17 @@ import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
 import { db, initializeDatabase, mapOrderRow } from './db'
-import type { OrderRow, OrderStatus, SlotRow } from './db'
-import { seedBookingSlots, seedCityPasses, seedOrders, seedScenicSpots, seedTicketTypes } from './data'
+import type { OrderRow, OrderStatus, SlotRow, TravelerProfileRow } from './db'
+import {
+  seedBookingSlots,
+  seedCityEvents,
+  seedCityPasses,
+  seedNeighborhoods,
+  seedOrders,
+  seedScenicSpots,
+  seedThemeJourneys,
+  seedTicketTypes,
+} from './data'
 import { buildOperationsPayload } from './operations'
 
 const app = express()
@@ -196,6 +205,33 @@ const orderPatchSchema = z.object({
   cancellationReason: z.string().trim().max(120).optional(),
 }).strict()
 
+const travelerSpotStateSchema = z.object({
+  favorite: z.boolean(),
+  status: z.enum(['wish', 'visited']).nullable(),
+  lastViewedAt: z.string().optional(),
+  updatedAt: z.string(),
+}).strict()
+
+const travelerTripItemSchema = z.object({
+  id: idSchema,
+  scenicSpotId: idSchema,
+  cityPassId: idSchema.optional(),
+  dateLabel: z.string().trim().max(40).optional(),
+  timeLabel: z.string().trim().max(40).optional(),
+  note: z.string().trim().max(160).optional(),
+  createdAt: z.string(),
+}).strict()
+
+const travelerProfileSchema = z.object({
+  id: idSchema,
+  displayName: z.string().trim().max(48).optional(),
+  spotStates: z.record(idSchema, travelerSpotStateSchema),
+  tripItems: z.array(travelerTripItemSchema).max(64),
+  searchHistory: z.array(z.string().trim().min(1).max(60)).max(20),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}).strict()
+
 const requireAdminAuth = (request: Request, response: Response, next: NextFunction) => {
   if (!adminToken) {
     next()
@@ -257,6 +293,50 @@ app.get('/api/scenic-spots', (_request, response) => {
 
 app.get('/api/city-passes', (_request, response) => {
   response.json(listCityPasses())
+})
+
+app.get('/api/neighborhoods', (_request, response) => {
+  response.set('Cache-Control', 'public, max-age=1800, stale-while-revalidate=3600')
+  response.json(seedNeighborhoods)
+})
+
+app.get('/api/events', (_request, response) => {
+  response.set('Cache-Control', 'public, max-age=900, stale-while-revalidate=1800')
+  response.json(seedCityEvents)
+})
+
+app.get('/api/theme-journeys', (_request, response) => {
+  response.set('Cache-Control', 'public, max-age=1800, stale-while-revalidate=3600')
+  response.json(seedThemeJourneys)
+})
+
+app.get('/api/traveler-profiles/:id', (request, response) => {
+  const id = routeParam(request, 'id')
+  const profile = findTravelerProfile(id)
+  if (!profile) {
+    response.status(404).json({ message: '未找到旅行档案' })
+    return
+  }
+
+  response.json(profile)
+})
+
+app.put('/api/traveler-profiles/:id', (request, response) => {
+  const id = routeParam(request, 'id')
+  handleZod(travelerProfileSchema, request, response, (input) => {
+    if (input.id !== id) {
+      response.status(400).json({ message: '档案编号不一致' })
+      return
+    }
+
+    upsertTravelerProfile(input)
+    const saved = findTravelerProfile(id)
+    if (!saved) {
+      response.status(500).json({ message: '旅行档案保存失败' })
+      return
+    }
+    response.json(saved)
+  })
 })
 
 app.get('/api/scenic-spots/:id', (request, response) => {
@@ -867,6 +947,49 @@ const findScenicSpot = (id: string) => {
 const listCityPasses = () => seedCityPasses
 
 const findCityPassById = (id: string) => seedCityPasses.find((item) => item.id === id) ?? null
+
+const parseTravelerProfile = (row: TravelerProfileRow) => {
+  const parsed = JSON.parse(row.profile_json) as z.infer<typeof travelerProfileSchema>
+  return {
+    ...parsed,
+    displayName: row.display_name ?? parsed.displayName,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+const findTravelerProfile = (id: string) => {
+  const row = db
+    .prepare(
+      `
+        SELECT id, display_name, profile_json, created_at, updated_at
+        FROM traveler_profiles
+        WHERE id = ?
+      `,
+    )
+    .get(id) as TravelerProfileRow | undefined
+
+  return row ? parseTravelerProfile(row) : null
+}
+
+const upsertTravelerProfile = (profile: z.infer<typeof travelerProfileSchema>) => {
+  db.prepare(
+    `
+      INSERT INTO traveler_profiles (id, display_name, profile_json, created_at, updated_at)
+      VALUES (@id, @displayName, @profileJson, @createdAt, @updatedAt)
+      ON CONFLICT(id) DO UPDATE SET
+        display_name = excluded.display_name,
+        profile_json = excluded.profile_json,
+        updated_at = excluded.updated_at
+    `,
+  ).run({
+    id: profile.id,
+    displayName: profile.displayName ?? null,
+    profileJson: JSON.stringify(profile),
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  })
+}
 
 const listTicketTypes = (scenicSpotId: string) => {
   if (scenicSpotId) {

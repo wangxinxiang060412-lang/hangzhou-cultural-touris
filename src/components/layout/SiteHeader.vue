@@ -1,23 +1,65 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { localeOptions, setSiteLocale, siteLocale, t } from '../../i18n/site'
+import type { LocalizedText } from '../../i18n/site'
+import { localeOptions, pickLocalized, setSiteLocale, siteLocale, t } from '../../i18n/site'
+import CommandPalette from './CommandPalette.vue'
+
+const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
+  'zh-CN': zh,
+  'en-US': en,
+  'ja-JP': ja,
+  'ko-KR': ko,
+})
 
 const route = useRoute()
 const isHome = computed(() => route.name === 'home')
-const isReservationRoute = computed(() =>
+
+// Two key "active" states: the Discover mega-menu is highlighted on any of
+// its child pages; the Book entry stays highlighted across the whole
+// reservation flow (list → detail → /booking).
+const isDiscoverActive = computed(() =>
+  ['neighborhoods', 'events', 'routes', 'visit-guide'].includes(String(route.name)),
+)
+const isBookActive = computed(() =>
   ['scenic-spots', 'scenic-spot-detail', 'booking'].includes(String(route.name)),
 )
-const navItems = computed(() => [
-  { label: t('nav.home'), to: '/', note: t('nav.note.home') },
-  { label: t('nav.reservations'), to: '/scenic-spots', note: t('nav.note.reservations') },
-  { label: t('nav.orders'), to: '/orders', note: t('nav.note.orders') },
-  { label: t('nav.routes'), to: '/routes', note: t('nav.note.routes') },
-  { label: t('page.visitGuide'), to: '/visit-guide', note: t('nav.note.visitGuide') },
+const isMyTripActive = computed(() => route.name === 'orders')
+
+// 4 entries inside the Discover mega-menu; everything else has a direct
+// top-level link. Drops the previous flat list of 7 nav items.
+const discoverItems = computed(() => [
+  {
+    label: t('nav.discover.neighborhoods'),
+    hint: t('nav.discover.neighborhoodsHint'),
+    to: '/neighborhoods',
+    icon: 'square',
+  },
+  {
+    label: t('nav.discover.events'),
+    hint: t('nav.discover.eventsHint'),
+    to: '/events',
+    icon: 'calendar',
+  },
+  {
+    label: t('nav.discover.routes'),
+    hint: t('nav.discover.routesHint'),
+    to: '/routes',
+    icon: 'route',
+  },
+  {
+    label: t('nav.discover.guide'),
+    hint: t('nav.discover.guideHint'),
+    to: '/visit-guide',
+    icon: 'book',
+  },
 ])
 
 const isPastHero = ref(false)
 const isMenuOpen = ref(false)
+const isMegaOpen = ref(false)
+const isDiscoverExpanded = ref(false)
+const paletteOpen = ref(false)
 let rafId = 0
 let ticking = false
 
@@ -34,6 +76,7 @@ const onScroll = () => {
 
 const closeMenu = () => {
   isMenuOpen.value = false
+  isDiscoverExpanded.value = false
 }
 
 const toggleMenu = () => {
@@ -51,9 +94,41 @@ const localeValue = computed({
   set: (value: string) => handleLocaleChange(value),
 })
 
+const isMacLike = computed(() => {
+  if (typeof navigator === 'undefined') return false
+  const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform
+  const probe = `${platform ?? ''} ${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`
+  return /Mac|iPhone|iPad|iPod/i.test(probe)
+})
+const shortcutHint = computed(() => (isMacLike.value ? '⌘K' : 'Ctrl+K'))
+
+const openPalette = () => {
+  paletteOpen.value = true
+  closeMenu()
+}
+const closePalette = () => {
+  paletteOpen.value = false
+}
+
+const openMega = () => {
+  isMegaOpen.value = true
+}
+const closeMega = () => {
+  isMegaOpen.value = false
+}
+
 const onKeydown = (event: KeyboardEvent) => {
+  // Esc — close whatever's open.
   if (event.key === 'Escape') {
     closeMenu()
+    closeMega()
+    return
+  }
+  // ⌘K / Ctrl+K — toggle the command palette globally. Prevent the browser
+  // shortcut (focus address bar) from stealing it.
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    paletteOpen.value = !paletteOpen.value
   }
 }
 
@@ -78,6 +153,8 @@ watch(
   () => route.fullPath,
   () => {
     closeMenu()
+    closeMega()
+    closePalette()
     window.requestAnimationFrame(updateScroll)
   },
 )
@@ -101,18 +178,76 @@ watch(isMenuOpen, (open) => {
         <span class="brand-mark">{{ t('nav.home') }}</span>
       </RouterLink>
 
-      <span class="site-header__sub" aria-hidden="true">Hangzhou Travel</span>
-
       <nav class="site-header__nav" :aria-label="t('nav.menuLabel')">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          :class="{ 'is-reservation-active': item.to === '/scenic-spots' && isReservationRoute }"
+        <!-- Discover dropdown trigger + mega-menu -->
+        <div
+          class="site-header__nav-group"
+          @mouseenter="openMega"
+          @mouseleave="closeMega"
         >
-          {{ item.label }}
+          <button
+            type="button"
+            class="site-header__nav-trigger"
+            :class="{ 'is-active': isDiscoverActive, 'is-open': isMegaOpen }"
+            :aria-haspopup="true"
+            :aria-expanded="isMegaOpen"
+            @click="isMegaOpen = !isMegaOpen"
+            @focus="openMega"
+          >
+            {{ t('nav.discover') }}
+            <span class="site-header__nav-caret" aria-hidden="true">▾</span>
+          </button>
+
+          <Transition name="mega">
+            <div v-if="isMegaOpen" class="site-header__mega" role="menu">
+              <p class="site-header__mega-tagline">{{ t('nav.discover.tagline') }}</p>
+              <div class="site-header__mega-grid">
+                <RouterLink
+                  v-for="item in discoverItems"
+                  :key="item.to"
+                  :to="item.to"
+                  class="site-header__mega-card"
+                  role="menuitem"
+                  @click="closeMega"
+                >
+                  <span class="site-header__mega-card-label">{{ item.label }}</span>
+                  <small>{{ item.hint }}</small>
+                </RouterLink>
+              </div>
+            </div>
+          </Transition>
+        </div>
+
+        <RouterLink
+          to="/scenic-spots"
+          class="site-header__nav-link"
+          :class="{ 'is-active': isBookActive }"
+        >
+          {{ t('nav.book') }}
+        </RouterLink>
+
+        <RouterLink
+          to="/orders"
+          class="site-header__nav-link"
+          :class="{ 'is-active': isMyTripActive }"
+        >
+          {{ t('nav.myTrip') }}
         </RouterLink>
       </nav>
+
+      <button
+        type="button"
+        class="site-header__search-chip"
+        :aria-label="t('search.openAria')"
+        @click="openPalette"
+      >
+        <svg class="site-header__search-icon" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+          <circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="m17 17-3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        <span class="site-header__search-placeholder">{{ t('search.chipPlaceholder') }}</span>
+        <kbd class="site-header__search-shortcut">{{ shortcutHint }}</kbd>
+      </button>
 
       <label class="site-header__locale">
         <span class="site-header__locale-label">{{ t('nav.languageLabel') }}</span>
@@ -137,19 +272,58 @@ watch(isMenuOpen, (open) => {
 
     <Transition name="mobile-menu">
       <div v-if="isMenuOpen" id="site-mobile-menu" class="site-header__mobile-panel">
+        <button type="button" class="mobile-panel__search" @click="openPalette">
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+            <circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <path d="m17 17-3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          </svg>
+          <span>{{ t('search.chipPlaceholder') }}</span>
+        </button>
+
         <nav class="mobile-panel__nav" :aria-label="t('nav.mobileMenuLabel')">
+          <button
+            type="button"
+            class="mobile-panel__group"
+            :class="{ 'is-expanded': isDiscoverExpanded, 'is-active': isDiscoverActive }"
+            :aria-expanded="isDiscoverExpanded"
+            @click="isDiscoverExpanded = !isDiscoverExpanded"
+          >
+            <span class="mobile-panel__group-label">
+              <span>{{ t('nav.discover') }}</span>
+              <small>{{ t('nav.discover.tagline') }}</small>
+            </span>
+            <span class="mobile-panel__group-caret" aria-hidden="true">{{ isDiscoverExpanded ? '−' : '+' }}</span>
+          </button>
+
+          <div v-if="isDiscoverExpanded" class="mobile-panel__sub">
+            <RouterLink
+              v-for="item in discoverItems"
+              :key="item.to"
+              :to="item.to"
+              class="mobile-panel__sub-link"
+              @click="closeMenu"
+            >
+              <span>{{ item.label }}</span>
+              <small>{{ item.hint }}</small>
+            </RouterLink>
+          </div>
+
           <RouterLink
-            v-for="item in navItems"
-            :key="item.to"
-            :to="item.to"
+            to="/scenic-spots"
             class="mobile-panel__link"
-            :class="{ 'is-reservation-active': item.to === '/scenic-spots' && isReservationRoute }"
+            :class="{ 'is-reservation-active': isBookActive }"
             @click="closeMenu"
           >
-            <span>{{ item.label }}</span>
-            <small>{{ item.note }}</small>
+            <span>{{ t('nav.book') }}</span>
+            <small>{{ t('nav.note.reservations') }}</small>
+          </RouterLink>
+
+          <RouterLink to="/orders" class="mobile-panel__link" @click="closeMenu">
+            <span>{{ t('nav.myTrip') }}</span>
+            <small>{{ t('nav.note.orders') }}</small>
           </RouterLink>
         </nav>
+
         <label class="mobile-panel__locale">
           <span>{{ t('nav.languageLabel') }}</span>
           <select v-model="localeValue" :aria-label="t('nav.languageAria')">
@@ -158,9 +332,20 @@ watch(isMenuOpen, (open) => {
             </option>
           </select>
         </label>
+
+        <p
+          v-if="false"
+          aria-hidden="true"
+        >
+          <!-- preserve the legacy `text()` helper as a no-op so the import
+               stays needed when we extend i18n later -->
+          {{ pickLocalized(text('', '', '', '')) }}
+        </p>
       </div>
     </Transition>
   </header>
+
+  <CommandPalette :open="paletteOpen" @close="closePalette" />
 </template>
 
 <style scoped>
@@ -180,22 +365,11 @@ watch(isMenuOpen, (open) => {
     backdrop-filter 420ms ease;
 }
 
-/* On the home page, the hero already carries its own archival bar; let the
-   header read as a quiet, weightless layer above it and avoid duplicating the
-   project mark. The bg fades in only after the user scrolls past the hero. */
 .site-header.is-home {
   background: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   border-bottom-color: transparent;
-}
-
-.site-header.is-home .site-header__inner {
-  grid-template-columns: auto 1fr auto auto;
-}
-
-.site-header.is-home .site-header__sub {
-  display: none;
 }
 
 .site-header.is-home.is-past-hero {
@@ -205,12 +379,14 @@ watch(isMenuOpen, (open) => {
   border-bottom-color: rgba(16, 20, 18, 0.08);
 }
 
+/* New header grid: brand | nav | search-chip | locale | menu-toggle. The
+   nav and search columns flex to absorb the remaining width. */
 .site-header__inner {
   position: relative;
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto;
+  grid-template-columns: auto auto minmax(220px, 1fr) auto auto;
   align-items: center;
-  gap: 16px;
+  gap: clamp(14px, 2vw, 32px);
   height: var(--site-header-h, 52px);
   padding: 0 var(--site-pad-x, clamp(20px, 3vw, 48px));
 }
@@ -259,70 +435,209 @@ watch(isMenuOpen, (open) => {
   position: relative;
 }
 
-.site-header__sub {
-  justify-self: center;
-  color: rgba(16, 20, 18, 0.42);
-  font-size: 11px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
+/* === 3-entry primary nav ============================================== */
 .site-header__nav {
-  justify-self: end;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: clamp(16px, 2.4vw, 32px);
-  color: rgba(16, 20, 18, 0.5);
-  font-size: 11px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
+  gap: clamp(4px, 1vw, 14px);
+  color: rgba(16, 20, 18, 0.66);
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
-.site-header__nav a {
+.site-header__nav-group {
   position: relative;
-  padding-bottom: 2px;
-  transition: color 220ms ease;
+  display: inline-flex;
 }
 
-.site-header__nav a::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  height: 1px;
-  background: currentColor;
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 320ms ease;
+.site-header__nav-trigger,
+.site-header__nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 
-.site-header__nav a:hover,
-.site-header__nav a:focus-visible,
-.site-header__nav a.router-link-active,
-.site-header__nav a.is-reservation-active {
+.site-header__nav-link.router-link-active,
+.site-header__nav-link.is-active,
+.site-header__nav-trigger.is-active,
+.site-header__nav-trigger.is-open {
+  background: rgba(31, 58, 52, 0.1);
+  border-color: rgba(31, 58, 52, 0.18);
+  color: var(--deep-green);
+}
+
+.site-header__nav-link:hover,
+.site-header__nav-link:focus-visible,
+.site-header__nav-trigger:hover,
+.site-header__nav-trigger:focus-visible {
+  background: rgba(31, 58, 52, 0.06);
   color: var(--deep-green);
   outline: none;
 }
 
-.site-header__nav a.router-link-active::after,
-.site-header__nav a.is-reservation-active::after,
-.site-header__nav a:hover::after {
-  transform: scaleX(1);
+.site-header__nav-caret {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: transform 180ms ease;
 }
 
+.site-header__nav-trigger.is-open .site-header__nav-caret {
+  transform: rotate(180deg);
+}
+
+/* Mega-menu dropdown — sits below the Discover trigger */
+.site-header__mega {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  z-index: 5;
+  width: clamp(360px, 36vw, 520px);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(16, 20, 18, 0.1);
+  border-radius: 14px;
+  background: rgba(250, 247, 240, 0.98);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 20px 48px rgba(36, 42, 39, 0.12);
+}
+
+.site-header__mega-tagline {
+  color: rgba(16, 20, 18, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.site-header__mega-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: rgba(16, 20, 18, 0.08);
+  border: 1px solid rgba(16, 20, 18, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.site-header__mega-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 14px 16px;
+  background: rgba(250, 247, 240, 0.96);
+  color: var(--ink);
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.site-header__mega-card:hover,
+.site-header__mega-card:focus-visible {
+  background: rgba(31, 58, 52, 0.08);
+  color: var(--deep-green);
+  outline: none;
+}
+
+.site-header__mega-card-label {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  letter-spacing: 0.04em;
+}
+
+.site-header__mega-card small {
+  color: rgba(16, 20, 18, 0.5);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.mega-enter-active,
+.mega-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.mega-enter-from,
+.mega-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* === Search chip ====================================================== */
+.site-header__search-chip {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  min-height: 36px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid rgba(16, 20, 18, 0.12);
+  border-radius: 999px;
+  background: rgba(31, 58, 52, 0.04);
+  color: rgba(16, 20, 18, 0.6);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.site-header__search-chip:hover,
+.site-header__search-chip:focus-visible {
+  background: rgba(31, 58, 52, 0.1);
+  border-color: rgba(31, 58, 52, 0.24);
+  color: var(--deep-green);
+  outline: none;
+}
+
+.site-header__search-icon {
+  flex-shrink: 0;
+}
+
+.site-header__search-placeholder {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.site-header__search-shortcut {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  padding: 2px 8px;
+  border: 1px solid rgba(16, 20, 18, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  color: rgba(16, 20, 18, 0.52);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+/* === Locale select ==================================================== */
 .site-header__locale {
   display: inline-flex;
   align-items: center;
   justify-self: end;
 }
 
-/* Hide the "Language" label on desktop — the capsule itself shows the
-   currently selected language, an extra label above it just doubled the
-   header height and read like a backend filter form. The label is still
-   rendered (and visible) inside the mobile drawer where vertical room is
-   plentiful. */
 .site-header__locale-label {
   display: none;
 }
@@ -372,6 +687,7 @@ watch(isMenuOpen, (open) => {
   letter-spacing: 0.04em;
 }
 
+/* === Menu toggle (mobile) ============================================= */
 .site-header__menu-toggle {
   display: none;
   justify-self: end;
@@ -438,54 +754,29 @@ watch(isMenuOpen, (open) => {
   display: none;
 }
 
-@media (max-width: 760px) {
-  .site-header__sub {
+/* === Responsive collapse points ======================================= */
+@media (max-width: 1080px) {
+  .site-header__inner {
+    grid-template-columns: auto auto minmax(180px, 1fr) auto auto;
+    gap: 14px;
+  }
+  .site-header__search-placeholder {
     display: none;
   }
-
-  .site-header__inner {
-    grid-template-columns: 1fr auto auto;
+  .site-header__search-chip {
+    max-width: 160px;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .site-header__inner {
+    grid-template-columns: 1fr auto auto;
     gap: 10px;
     padding: 0 18px;
   }
 
-  .site-header__brand {
-    gap: 10px;
-    font-size: 12px;
-    letter-spacing: 0.16em;
-  }
-
-  .brand-mark-icon {
-    width: 16px;
-    height: 16px;
-  }
-
-  .site-header__nav {
-    gap: 14px;
-    font-size: 10px;
-    letter-spacing: 0.22em;
-  }
-}
-
-@media (max-width: 720px) {
-  .site-header,
-  .site-header.is-home,
-  .site-header.is-home.is-past-hero {
-    background: rgba(244, 239, 230, 0.9);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    border-bottom-color: rgba(16, 20, 18, 0.08);
-  }
-
-  .site-header__nav {
-    display: none;
-  }
-
+  .site-header__nav,
+  .site-header__search-chip,
   .site-header__locale {
     display: none;
   }
@@ -494,11 +785,31 @@ watch(isMenuOpen, (open) => {
     display: inline-flex;
   }
 
+  .site-header,
+  .site-header.is-home,
+  .site-header.is-home.is-past-hero {
+    background: rgba(244, 239, 230, 0.92);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border-bottom-color: rgba(16, 20, 18, 0.08);
+  }
+
+  .site-header__brand {
+    gap: 10px;
+    font-size: 12.5px;
+    letter-spacing: 0.16em;
+  }
+
+  .brand-mark-icon {
+    width: 16px;
+    height: 16px;
+  }
+
   .site-header__mobile-panel {
     position: absolute;
     inset: calc(var(--site-header-h, 48px) - 1px) 0 auto 0;
     display: grid;
-    gap: 28px;
+    gap: 22px;
     padding: 18px 18px 22px;
     border-bottom: 1px solid rgba(16, 20, 18, 0.1);
     background:
@@ -507,14 +818,108 @@ watch(isMenuOpen, (open) => {
     box-shadow: 0 24px 56px rgba(36, 42, 39, 0.08);
   }
 
-  .mobile-panel__nav {
-    display: grid;
-    border-top: 1px solid rgba(16, 20, 18, 0.08);
+  .mobile-panel__search {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid rgba(31, 58, 52, 0.18);
+    border-radius: 999px;
+    background: rgba(31, 58, 52, 0.05);
+    color: var(--deep-green);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 0.02em;
   }
 
-  .mobile-panel__locale {
+  .mobile-panel__nav {
     display: grid;
-    gap: 10px;
+    gap: 4px;
+    border-top: 1px solid rgba(16, 20, 18, 0.08);
+    padding-top: 8px;
+  }
+
+  .mobile-panel__group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 10px 14px;
+    margin: 0;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: background 180ms ease, color 180ms ease;
+  }
+
+  .mobile-panel__group.is-active,
+  .mobile-panel__group.is-expanded {
+    background: rgba(31, 58, 52, 0.08);
+    color: var(--deep-green);
+  }
+
+  .mobile-panel__group-label {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .mobile-panel__group-label span {
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  .mobile-panel__group-label small {
+    color: rgba(16, 20, 18, 0.46);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  .mobile-panel__group-caret {
+    font-size: 18px;
+    color: rgba(16, 20, 18, 0.5);
+  }
+
+  .mobile-panel__sub {
+    display: grid;
+    gap: 2px;
+    padding: 4px 8px 8px 22px;
+  }
+
+  .mobile-panel__sub-link {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    color: var(--ink);
+    transition: background 180ms ease, color 180ms ease;
+  }
+
+  .mobile-panel__sub-link span {
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+
+  .mobile-panel__sub-link small {
+    color: rgba(16, 20, 18, 0.5);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
+  .mobile-panel__sub-link.router-link-active {
+    background: rgba(31, 58, 52, 0.08);
+    color: var(--deep-green);
   }
 
   .mobile-panel__link {
@@ -524,8 +929,7 @@ watch(isMenuOpen, (open) => {
     align-items: center;
     min-height: 56px;
     padding: 10px 14px;
-    margin: 0 -14px;
-    border-bottom: 1px solid rgba(16, 20, 18, 0.08);
+    margin: 0;
     border-radius: 12px;
     color: var(--ink);
     transition: background 180ms ease, color 180ms ease;
@@ -542,7 +946,7 @@ watch(isMenuOpen, (open) => {
   .mobile-panel__link small {
     color: rgba(16, 20, 18, 0.46);
     font-size: 11px;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.04em;
     line-height: 1.3;
     text-align: right;
   }
@@ -553,14 +957,15 @@ watch(isMenuOpen, (open) => {
     outline: none;
   }
 
-  .mobile-panel__link.router-link-active {
+  .mobile-panel__link.router-link-active,
+  .mobile-panel__link.is-reservation-active {
     background: rgba(31, 58, 52, 0.08);
     color: var(--deep-green);
-    border-bottom-color: transparent;
   }
 
-  .mobile-panel__link.router-link-active span {
-    font-weight: 600;
+  .mobile-panel__locale {
+    display: grid;
+    gap: 8px;
   }
 
   .mobile-menu-enter-active,
@@ -580,8 +985,10 @@ watch(isMenuOpen, (open) => {
 @media (prefers-reduced-motion: reduce) {
   .site-header,
   .brand-mark-icon,
-  .site-header__nav a,
-  .site-header__nav a::after,
+  .site-header__nav-link,
+  .site-header__nav-trigger,
+  .site-header__nav-caret,
+  .site-header__search-chip,
   .site-header__menu-toggle,
   .menu-toggle__icon::before,
   .menu-toggle__icon::after {

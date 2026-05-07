@@ -244,13 +244,18 @@ onMounted(() => {
 .city-pass-card {
   display: grid;
   grid-template-columns: minmax(320px, 0.44fr) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(18px, 2vw, 28px);
   min-width: 0;
+  padding: clamp(18px, 2.2vw, 24px);
   border: 1px solid rgba(16, 20, 18, 0.08);
   background: rgba(252, 249, 243, 0.96);
 }
 
 .city-pass-card__media {
-  min-height: 100%;
+  align-self: start;
+  aspect-ratio: 4 / 3.3;
+  overflow: hidden;
   background: rgba(216, 221, 214, 0.42);
 }
 
@@ -259,7 +264,7 @@ onMounted(() => {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 320px;
+  min-height: 0;
 }
 
 .city-pass-card__media img {
@@ -281,19 +286,22 @@ onMounted(() => {
 }
 
 .city-pass-card__top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 24px;
 }
 
 .city-pass-card__top h2 {
   margin: 6px 0 0;
+  max-width: 15ch;
   font-family: var(--font-serif);
   font-size: clamp(28px, 3vw, 40px);
   font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 1.12;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .city-pass-card__price {
@@ -315,6 +323,10 @@ onMounted(() => {
 
 .city-pass-card__price small {
   color: var(--westlake-green);
+}
+
+.city-pass-card__description {
+  max-width: 46rem;
 }
 
 .city-pass-card__facts {
@@ -397,12 +409,22 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .city-pass-card {
+    padding: 18px;
+  }
+
   .city-pass-card__top {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
 
   .city-pass-card__price {
     justify-items: start;
+    white-space: normal;
+  }
+
+  .city-pass-card__media {
+    aspect-ratio: 4 / 2.65;
   }
 }
 </style>

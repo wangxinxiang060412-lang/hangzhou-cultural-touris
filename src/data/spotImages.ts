@@ -39,6 +39,36 @@ const positionRegistry: Record<string, SpotImageEntry['position']> = {
     featured: '52% 56%',
     detail: '52% 54%',
   },
+  'southern-song-imperial-street': {
+    list: '50% 44%',
+    featured: '52% 42%',
+    detail: '52% 44%',
+  },
+  'xiaohe-street': {
+    list: '50% 56%',
+    featured: '54% 54%',
+    detail: '54% 56%',
+  },
+  'hangzhou-botanical-garden': {
+    list: '50% 48%',
+    featured: '52% 46%',
+    detail: '52% 48%',
+  },
+  'hangzhou-zoo': {
+    list: '52% 46%',
+    featured: '54% 44%',
+    detail: '54% 46%',
+  },
+  'leifeng-pagoda': {
+    list: '50% 42%',
+    featured: '52% 40%',
+    detail: '52% 42%',
+  },
+  guozhuang: {
+    list: '50% 52%',
+    featured: '54% 50%',
+    detail: '54% 52%',
+  },
 }
 
 export const getSpotImage = (id: string): string | null => {

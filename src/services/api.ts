@@ -3,6 +3,7 @@ import type {
   BookingOrderStatus,
   BookingPaymentMethod,
 } from '../data/mockOrders'
+import type { ThemeJourneyFilter } from '../data/themeJourneys'
 import type { LocalizedText } from '../i18n/site'
 
 export type ApiScenicSpot = {
@@ -135,6 +136,89 @@ export type ApiOperationsPayload = {
   serviceCards: ApiOperationServiceCard[]
 }
 
+export type ApiTravelerTripItem = {
+  id: string
+  scenicSpotId: string
+  cityPassId?: string
+  dateLabel?: string
+  timeLabel?: string
+  note?: string
+  createdAt: string
+}
+
+export type ApiTravelerSpotState = {
+  favorite: boolean
+  status: 'wish' | 'visited' | null
+  lastViewedAt?: string
+  updatedAt: string
+}
+
+export type ApiTravelerProfile = {
+  id: string
+  displayName?: string
+  spotStates: Record<string, ApiTravelerSpotState>
+  tripItems: ApiTravelerTripItem[]
+  searchHistory: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type ApiNeighborhood = {
+  id: string
+  name: LocalizedText
+  nameEn: string
+  district: LocalizedText
+  theme: LocalizedText
+  description: LocalizedText
+  moodLine: LocalizedText
+  bestArrival: LocalizedText
+  foodHint: LocalizedText
+  walkingHint: LocalizedText
+  bestFor: LocalizedText[]
+  highlights: LocalizedText[]
+  leadSpotId: string
+  featuredSpotIds: string[]
+  suggestedRouteId?: string
+  suggestedPassId?: string
+}
+
+export type ApiCityEvent = {
+  id: string
+  name: LocalizedText
+  nameEn: string
+  category: LocalizedText
+  monthLabel: LocalizedText
+  district: LocalizedText
+  description: LocalizedText
+  bestFor: LocalizedText
+  bookingAlert: LocalizedText
+  weatherPlan: LocalizedText
+  statusNote: LocalizedText
+  relatedNeighborhoodId?: string
+  relatedSpotIds: string[]
+  leadSpotId: string
+}
+
+export type ApiThemeJourney = {
+  id: string
+  title: LocalizedText
+  titleEn: string
+  duration: LocalizedText
+  audience: LocalizedText
+  summary: LocalizedText
+  filters: ThemeJourneyFilter[]
+  neighborhoodIds: string[]
+  routeIds: string[]
+  spotIds: string[]
+  cityPassId?: string
+  accessibilityNote: LocalizedText
+  rainyPlan: LocalizedText
+  dayPlans: Array<{
+    label: LocalizedText
+    plan: LocalizedText
+  }>
+}
+
 export type ScenicSpotInput = Omit<ApiScenicSpot, 'id'> & { id?: string }
 export type TicketTypeInput = Omit<ApiTicketType, 'id'> & { id?: string }
 export type BookingSlotInput = {
@@ -211,6 +295,9 @@ export const fetchTicketTypes = (scenicSpotId?: string) => {
 }
 
 export const fetchCityPasses = () => request<ApiCityPass[]>('/city-passes')
+export const fetchNeighborhoods = () => request<ApiNeighborhood[]>('/neighborhoods')
+export const fetchCityEvents = () => request<ApiCityEvent[]>('/events')
+export const fetchThemeJourneys = () => request<ApiThemeJourney[]>('/theme-journeys')
 
 export const createTicketType = (input: TicketTypeInput) =>
   request<ApiTicketType>('/ticket-types', { method: 'POST', body: JSON.stringify(input) })
@@ -232,6 +319,15 @@ export const fetchBookingSlots = (scenicSpotId?: string) => {
 export const fetchHangzhouWeather = () => request<ApiHangzhouWeather>('/weather/hangzhou')
 
 export const fetchOperations = () => request<ApiOperationsPayload>('/operations/hangzhou')
+
+export const fetchTravelerProfile = (id: string) =>
+  request<ApiTravelerProfile>(`/traveler-profiles/${encodeURIComponent(id)}`)
+
+export const saveTravelerProfile = (id: string, profile: ApiTravelerProfile) =>
+  request<ApiTravelerProfile>(`/traveler-profiles/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(profile),
+  })
 
 export const createBookingSlot = (input: BookingSlotInput) =>
   request<ApiBookingSlot>('/booking-slots', { method: 'POST', body: JSON.stringify(input) })

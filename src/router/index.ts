@@ -9,6 +9,8 @@ import { getHeaderOffset } from '../utils/scroll'
 const Admin = () => import('../pages/Admin.vue')
 const Booking = () => import('../pages/Booking.vue')
 const CityPasses = () => import('../pages/CityPasses.vue')
+const EventsCalendar = () => import('../pages/EventsCalendar.vue')
+const Neighborhoods = () => import('../pages/Neighborhoods.vue')
 const NotFound = () => import('../pages/NotFound.vue')
 const Orders = () => import('../pages/Orders.vue')
 const Routes = () => import('../pages/Routes.vue')
@@ -88,6 +90,18 @@ const router = createRouter({
       name: 'city-passes',
       component: CityPasses,
       meta: { titleKey: 'page.cityPasses' },
+    },
+    {
+      path: '/neighborhoods',
+      name: 'neighborhoods',
+      component: Neighborhoods,
+      meta: { titleKey: 'page.neighborhoods' },
+    },
+    {
+      path: '/events',
+      name: 'events',
+      component: EventsCalendar,
+      meta: { titleKey: 'page.events' },
     },
     {
       path: '/booking',

@@ -23,10 +23,32 @@ const localeNames: Record<SiteLocale, string> = {
   'ko-KR': '한국어',
 }
 
-const readStoredLocale = (): SiteLocale => {
-  if (typeof window === 'undefined') return defaultLocale
+type BrowserStorageLike = {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
 
-  const value = window.localStorage.getItem(STORAGE_KEY)
+type BrowserDocumentLike = {
+  documentElement: {
+    lang: string
+  }
+}
+
+const getBrowserStorage = () => {
+  const candidate = globalThis as { localStorage?: BrowserStorageLike }
+  return candidate.localStorage ?? null
+}
+
+const getBrowserDocument = () => {
+  const candidate = globalThis as { document?: BrowserDocumentLike }
+  return candidate.document ?? null
+}
+
+const readStoredLocale = (): SiteLocale => {
+  const storage = getBrowserStorage()
+  if (!storage) return defaultLocale
+
+  const value = storage.getItem(STORAGE_KEY)
   if (value === 'zh-CN' || value === 'en-US' || value === 'ja-JP' || value === 'ko-KR') {
     return value
   }
@@ -44,9 +66,10 @@ export const localeOptions = (Object.keys(localeLabels) as SiteLocale[]).map((co
 
 export const setSiteLocale = (locale: SiteLocale) => {
   siteLocale.value = locale
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, locale)
-    document.documentElement.lang = locale
+  getBrowserStorage()?.setItem(STORAGE_KEY, locale)
+  const documentRef = getBrowserDocument()
+  if (documentRef) {
+    documentRef.documentElement.lang = locale
   }
 }
 
@@ -363,11 +386,29 @@ const messages: Record<string, LocalizedText> = {
     'ja-JP': '周遊ルート',
     'ko-KR': '추천 루트',
   },
+  'page.search': {
+    'zh-CN': '站内搜索',
+    'en-US': 'Search',
+    'ja-JP': '検索',
+    'ko-KR': '검색',
+  },
   'page.cityPasses': {
     'zh-CN': '城市组合票',
     'en-US': 'City Passes',
     'ja-JP': 'シティパス',
     'ko-KR': '시티 패스',
+  },
+  'page.neighborhoods': {
+    'zh-CN': '街区与区域',
+    'en-US': 'Neighbourhoods',
+    'ja-JP': '街区とエリア',
+    'ko-KR': '구역과 동네',
+  },
+  'page.events': {
+    'zh-CN': '活动日历',
+    'en-US': 'What’s On',
+    'ja-JP': 'イベント日程',
+    'ko-KR': '이벤트 캘린더',
   },
   'page.archive': {
     'zh-CN': '旅行档案',
@@ -2468,6 +2509,172 @@ messages['detail.rail.viewSlots'] = {
   'en-US': 'See available slots',
   'ja-JP': '予約可能な枠を見る',
   'ko-KR': '예약 가능한 시간대',
+}
+
+// === New 3-entry nav + mega-menu + command palette =======================
+messages['nav.discover'] = {
+  'zh-CN': '探索杭州',
+  'en-US': 'Discover',
+  'ja-JP': '杭州を探る',
+  'ko-KR': '항저우 탐색',
+}
+messages['nav.discover.tagline'] = {
+  'zh-CN': '街区 · 路线 · 活动 · 须知',
+  'en-US': 'Neighbourhoods · Routes · Events · Guides',
+  'ja-JP': 'エリア・ルート・イベント・ガイド',
+  'ko-KR': '구역 · 루트 · 이벤트 · 안내',
+}
+messages['nav.book'] = {
+  'zh-CN': '景点预约',
+  'en-US': 'Book',
+  'ja-JP': '予約する',
+  'ko-KR': '예약',
+}
+messages['nav.myTrip'] = {
+  'zh-CN': '我的行程',
+  'en-US': 'My Trip',
+  'ja-JP': 'マイ旅程',
+  'ko-KR': '내 여정',
+}
+messages['nav.discover.neighborhoods'] = {
+  'zh-CN': '街区',
+  'en-US': 'Neighbourhoods',
+  'ja-JP': 'エリア',
+  'ko-KR': '구역',
+}
+messages['nav.discover.neighborhoodsHint'] = {
+  'zh-CN': '城市分区与文化打法',
+  'en-US': 'City districts & culture',
+  'ja-JP': 'エリア・文化案内',
+  'ko-KR': '도시 구역과 문화',
+}
+messages['nav.discover.events'] = {
+  'zh-CN': '活动',
+  'en-US': 'What’s On',
+  'ja-JP': 'イベント',
+  'ko-KR': '이벤트',
+}
+messages['nav.discover.eventsHint'] = {
+  'zh-CN': '展览 · 演出 · 节庆日历',
+  'en-US': 'Exhibitions, shows & festivals',
+  'ja-JP': '展示・公演・祭り',
+  'ko-KR': '전시 · 공연 · 축제',
+}
+messages['nav.discover.routes'] = {
+  'zh-CN': '路线',
+  'en-US': 'Routes',
+  'ja-JP': 'ルート',
+  'ko-KR': '루트',
+}
+messages['nav.discover.routesHint'] = {
+  'zh-CN': '精选漫游路线',
+  'en-US': 'Curated slow itineraries',
+  'ja-JP': '周遊ルート集',
+  'ko-KR': '엄선된 여행 루트',
+}
+messages['nav.discover.guide'] = {
+  'zh-CN': '访前须知',
+  'en-US': 'Visit Guide',
+  'ja-JP': '訪問ガイド',
+  'ko-KR': '방문 안내',
+}
+messages['nav.discover.guideHint'] = {
+  'zh-CN': '实用攻略与服务支持',
+  'en-US': 'Practical info & services',
+  'ja-JP': '実用情報・サポート',
+  'ko-KR': '실용 정보 · 지원',
+}
+
+// Search chip + Command Palette
+messages['search.chipPlaceholder'] = {
+  'zh-CN': '搜景点、街区、活动…',
+  'en-US': 'Search places, areas, events…',
+  'ja-JP': 'スポット・エリア・イベントを検索',
+  'ko-KR': '명소·구역·이벤트 검색',
+}
+messages['search.chipShortcut'] = {
+  'zh-CN': '⌘K',
+  'en-US': '⌘K',
+  'ja-JP': '⌘K',
+  'ko-KR': '⌘K',
+}
+messages['search.openAria'] = {
+  'zh-CN': '打开搜索',
+  'en-US': 'Open search',
+  'ja-JP': '検索を開く',
+  'ko-KR': '검색 열기',
+}
+messages['palette.title'] = {
+  'zh-CN': '搜索杭州文旅',
+  'en-US': 'Search Hangzhou Travel',
+  'ja-JP': '杭州文旅を検索',
+  'ko-KR': '항저우 문화관광 검색',
+}
+messages['palette.placeholder'] = {
+  'zh-CN': '景点 / 街区 / 活动 / 路线 / 须知…',
+  'en-US': 'Places / areas / events / routes / guides…',
+  'ja-JP': 'スポット / エリア / イベント / ルート…',
+  'ko-KR': '명소 / 구역 / 이벤트 / 루트…',
+}
+messages['palette.empty'] = {
+  'zh-CN': '没有匹配项，换个关键词试试。',
+  'en-US': 'No matches — try a different keyword.',
+  'ja-JP': '該当なし。別のキーワードでお試しください。',
+  'ko-KR': '결과가 없습니다. 다른 키워드를 시도해 보세요.',
+}
+messages['palette.hint'] = {
+  'zh-CN': '↑↓ 浏览  ↵ 打开  Esc 关闭',
+  'en-US': '↑↓ navigate · ↵ open · Esc close',
+  'ja-JP': '↑↓ 移動 / ↵ 開く / Esc 閉じる',
+  'ko-KR': '↑↓ 이동 · ↵ 열기 · Esc 닫기',
+}
+messages['palette.suggestions'] = {
+  'zh-CN': '推荐探索',
+  'en-US': 'Suggestions',
+  'ja-JP': 'おすすめ',
+  'ko-KR': '추천',
+}
+messages['palette.group.spot'] = {
+  'zh-CN': '景点',
+  'en-US': 'Places',
+  'ja-JP': 'スポット',
+  'ko-KR': '명소',
+}
+messages['palette.group.neighborhood'] = {
+  'zh-CN': '街区',
+  'en-US': 'Areas',
+  'ja-JP': 'エリア',
+  'ko-KR': '구역',
+}
+messages['palette.group.event'] = {
+  'zh-CN': '活动',
+  'en-US': 'Events',
+  'ja-JP': 'イベント',
+  'ko-KR': '이벤트',
+}
+messages['palette.group.route'] = {
+  'zh-CN': '路线',
+  'en-US': 'Routes',
+  'ja-JP': 'ルート',
+  'ko-KR': '루트',
+}
+messages['palette.group.pass'] = {
+  'zh-CN': '通票 / 卡',
+  'en-US': 'Passes',
+  'ja-JP': 'パス',
+  'ko-KR': '패스',
+}
+messages['palette.group.theme'] = {
+  'zh-CN': '主题旅程',
+  'en-US': 'Themed Trips',
+  'ja-JP': 'テーマ旅',
+  'ko-KR': '테마 여행',
+}
+messages['palette.close'] = {
+  'zh-CN': '关闭',
+  'en-US': 'Close',
+  'ja-JP': '閉じる',
+  'ko-KR': '닫기',
 }
 
 const interpolate = (template: string, vars?: Record<string, string | number>) => {
