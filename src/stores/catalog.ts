@@ -1,16 +1,18 @@
 import { computed, ref } from 'vue'
 import {
   fetchBookingSlots,
+  fetchCityPasses,
   fetchOrders,
   fetchScenicSpots,
   fetchTicketTypes,
 } from '../services/api'
-import type { ApiBookingSlot, ApiScenicSpot, ApiTicketType } from '../services/api'
+import type { ApiBookingSlot, ApiCityPass, ApiScenicSpot, ApiTicketType } from '../services/api'
 import type { BookingOrder } from '../data/mockOrders'
 
 export const scenicSpots = ref<ApiScenicSpot[]>([])
 export const ticketTypes = ref<ApiTicketType[]>([])
 export const bookingSlots = ref<ApiBookingSlot[]>([])
+export const cityPasses = ref<ApiCityPass[]>([])
 export const orders = ref<BookingOrder[]>([])
 export const catalogError = ref('')
 export const catalogLoaded = ref(false)
@@ -38,6 +40,11 @@ export const refreshTicketTypes = () =>
     ticketTypes.value = value
   })
 
+export const refreshCityPasses = () =>
+  runPromise(fetchCityPasses(), (value) => {
+    cityPasses.value = value
+  })
+
 export const refreshBookingSlots = () =>
   runPromise(fetchBookingSlots(), (value) => {
     bookingSlots.value = value
@@ -50,7 +57,12 @@ export const refreshOrders = () =>
 
 export const refreshCatalog = async () => {
   catalogError.value = ''
-  await Promise.all([refreshScenicSpots(), refreshTicketTypes(), refreshBookingSlots()])
+  await Promise.all([
+    refreshScenicSpots(),
+    refreshTicketTypes(),
+    refreshBookingSlots(),
+    refreshCityPasses(),
+  ])
   catalogLoaded.value = true
 }
 
@@ -60,6 +72,7 @@ export const refreshAll = async () => {
     refreshScenicSpots(),
     refreshTicketTypes(),
     refreshBookingSlots(),
+    refreshCityPasses(),
     refreshOrders(),
   ])
   catalogLoaded.value = true

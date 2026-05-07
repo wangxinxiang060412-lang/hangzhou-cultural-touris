@@ -2,22 +2,20 @@
 import { computed, onMounted } from 'vue'
 import type { LocalizedText } from '../../i18n/site'
 import { pickLocalized } from '../../i18n/site'
-import { bookingSlots, ensureCatalog } from '../../stores/catalog'
-import { formatLocalDate } from '../../utils/date'
+import {
+  ensureOperationsFeed,
+  featuredOperationAlerts,
+  operationServiceCards,
+  type OperationNotice,
+  type OperationServiceCard,
+} from '../../stores/operations'
 
 type NoticeItem = {
   id: string
+  tone?: 'normal' | 'watch' | 'limited' | 'closed'
   tag: LocalizedText
   title: LocalizedText
   detail: LocalizedText
-}
-
-type ServiceItem = {
-  id: string
-  label: LocalizedText
-  value: string
-  detail: LocalizedText
-  href?: string
 }
 
 const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
@@ -27,60 +25,31 @@ const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => 
   'ko-KR': ko,
 })
 
-const today = formatLocalDate(new Date())
-
-const todayQuota = computed(() =>
-  bookingSlots.value
-    .filter((slot) => slot.date === today)
-    .reduce((total, slot) => total + slot.remaining, 0),
-)
-
-const notices: NoticeItem[] = [
-  {
-    id: 'entry',
-    tag: text('入园政策', 'Entry Policy', '入園方針', '입장 정책'),
-    title: text('免费开放点位以到访登记和现场秩序为准', 'Free-entry places follow visit registration and on-site control', '無料開放地点は訪問登録と現地運用に準じます', '무료 개방 지점은 방문 등록과 현장 운영을 따릅니다'),
-    detail: text('A 级景区不再实行统一入园预约，但演出、游船、展馆、节假日高峰和临时维护仍可能要求分时购票或现场限流。', 'A-level scenic areas no longer use a unified reservation requirement, while shows, boats, museums, holidays and maintenance may still require timed tickets or crowd control.', 'A 級観光地の一律予約要件はありませんが、公演、船便、展示館、祝休日、保守時は時間帯券や入場制限が行われる場合があります。', 'A급 관광지의 통합 예약 요건은 없지만 공연, 선박, 전시관, 공휴일, 점검 시 시간대 티켓 또는 인원 제한이 있을 수 있습니다.'),
-  },
+const baselineNotices: NoticeItem[] = [
   {
     id: 'identity',
+    tone: 'normal',
     tag: text('实名核验', 'Identity Check', '本人確認', '본인 확인'),
-    title: text('购票、优惠和入场凭证需与有效证件一致', 'Tickets, concessions and passes should match valid ID', '券、優待、入場証明は有効な身分証と一致させてください', '티켓, 우대, 입장 증빙은 유효한 신분증과 일치해야 합니다'),
+    title: text('购票、优惠和入场凭证需与有效证件一致', 'Tickets, concessions and entry proof should match valid ID', '券、優待、入場証明は有効な身分証と一致させてください', '티켓, 우대, 입장 증빙은 유효한 신분증과 일치해야 합니다'),
     detail: text('请准确填写姓名、手机号与证件信息；同行多人办理时，部分景点会逐人核验。', 'Enter name, phone and ID accurately. Some sites verify each visitor in multi-person bookings.', '氏名、電話番号、身分証情報を正確に入力してください。複数人の場合、施設により個別確認があります。', '이름, 전화번호, 신분증 정보를 정확히 입력하세요. 여러 명 예약 시 일부 명소는 개별 확인을 합니다.'),
-  },
-  {
-    id: 'traffic',
-    tag: text('高峰出行', 'Peak Travel', '混雑時移動', '혼잡 이동'),
-    title: text('西湖、灵隐、西溪周边建议优先公共交通', 'Prefer public transport around West Lake, Lingyin and Xixi', '西湖・霊隠・西渓周辺は公共交通を優先', '시후·링인·시시 주변은 대중교통 권장'),
-    detail: text('周末、节假日和雨雾天气停车与叫车压力较高，请预留换乘和安检时间。', 'Weekends, holidays, rain and fog increase parking and ride-hailing pressure. Allow transfer and security-check time.', '週末、祝休日、雨霧時は駐車と配車が混雑します。乗換・手荷物検査時間に余裕を持ってください。', '주말, 공휴일, 비·안개 시 주차와 호출 차량 이용이 어려우니 환승과 보안 검색 시간을 확보하세요.'),
   },
 ]
 
-const services = computed<ServiceItem[]>(() => [
-  {
-    id: 'quota',
-    label: text('今日可预约余量', 'Today Available', '本日残数', '오늘 가능 수량'),
-    value: todayQuota.value.toString(),
-    detail: text('以页面实时刷新结果为准', 'Based on the latest page refresh', 'ページ更新時点の結果です', '페이지 새로고침 결과 기준'),
-  },
-  {
-    id: 'tourism-hotline',
-    label: text('旅游咨询', 'Tourism Hotline', '観光相談', '관광 상담'),
-    value: '12301',
-    href: 'tel:12301',
-    detail: text('旅游咨询、投诉与服务指引', 'Travel advice, complaints and service guidance', '観光相談、苦情、サービス案内', '관광 상담, 민원, 서비스 안내'),
-  },
-  {
-    id: 'city-hotline',
-    label: text('城市服务', 'City Service', '都市サービス', '도시 서비스'),
-    value: '12345',
-    href: 'tel:12345',
-    detail: text('城市公共服务与应急转办', 'Public service and urgent case transfer', '公共サービスと緊急取次', '공공 서비스 및 긴급 이관'),
-  },
-])
+const notices = computed<NoticeItem[]>(() => {
+  const live = featuredOperationAlerts.value.map((notice: OperationNotice) => ({
+    ...notice,
+    tone: notice.tone,
+  }))
+
+  return [...live, ...baselineNotices].slice(0, 4)
+})
+
+const services = computed<OperationServiceCard[]>(() => operationServiceCards.value)
+
+const toneClass = (tone?: NoticeItem['tone']) => (tone ? `is-${tone}` : '')
 
 onMounted(() => {
-  void ensureCatalog()
+  void ensureOperationsFeed()
 })
 </script>
 
@@ -97,7 +66,12 @@ onMounted(() => {
 
       <div class="official-notice__layout">
         <div class="official-notice__list">
-          <article v-for="notice in notices" :key="notice.id" class="notice-card">
+          <article
+            v-for="notice in notices"
+            :key="notice.id"
+            class="notice-card"
+            :class="toneClass(notice.tone)"
+          >
             <small>{{ pickLocalized(notice.tag) }}</small>
             <h3>{{ pickLocalized(notice.title) }}</h3>
             <p>{{ pickLocalized(notice.detail) }}</p>
@@ -204,6 +178,26 @@ onMounted(() => {
   gap: clamp(16px, 3vw, 36px);
   padding: clamp(20px, 2.6vw, 32px);
   align-items: baseline;
+}
+
+.notice-card.is-watch,
+.notice-card.is-limited,
+.notice-card.is-closed {
+  box-shadow: inset 3px 0 0 rgba(31, 58, 52, 0.18);
+}
+
+.notice-card.is-watch {
+  background: rgba(250, 247, 240, 0.96);
+}
+
+.notice-card.is-limited {
+  background: rgba(247, 242, 232, 0.98);
+  box-shadow: inset 3px 0 0 rgba(167, 121, 58, 0.42);
+}
+
+.notice-card.is-closed {
+  background: rgba(244, 237, 229, 0.98);
+  box-shadow: inset 3px 0 0 rgba(146, 84, 52, 0.42);
 }
 
 .notice-card h3 {

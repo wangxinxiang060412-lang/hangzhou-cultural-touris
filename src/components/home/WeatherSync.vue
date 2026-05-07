@@ -59,7 +59,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="weather-sync" :aria-label="t('weather.aria')" data-reveal>
+  <section id="weather" class="weather-sync" :aria-label="t('weather.aria')" data-reveal>
     <div class="weather-sync__inner">
       <header class="weather-sync__header">
         <div>

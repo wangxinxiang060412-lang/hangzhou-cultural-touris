@@ -3,6 +3,7 @@ import PageCrumbs from '../components/common/PageCrumbs.vue'
 import WeatherBrief from '../components/common/WeatherBrief.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
 import {
+  ticketingRules,
   visitGuideEmergency,
   visitGuideFacts,
   visitGuideFaq,
@@ -94,9 +95,23 @@ import { pickLocalized, t } from '../i18n/site'
         </div>
       </section>
 
+      <section class="guide-section" aria-labelledby="guide-ticket-rules-title" data-reveal>
+        <header class="guide-section__head">
+          <p>04 / Ticket Rules</p>
+          <h2 id="guide-ticket-rules-title">{{ t('guide.section.ticketRules') }}</h2>
+        </header>
+
+        <div class="guide-grid guide-grid--rules">
+          <article v-for="rule in ticketingRules" :key="rule.id" class="guide-card">
+            <small>{{ pickLocalized(rule.title) }}</small>
+            <p>{{ pickLocalized(rule.detail) }}</p>
+          </article>
+        </div>
+      </section>
+
       <section class="guide-section" aria-labelledby="guide-transport-title" data-reveal>
         <header class="guide-section__head">
-          <p>04 / Transport</p>
+          <p>05 / Transport</p>
           <h2 id="guide-transport-title">{{ t('guide.section.transport') }}</h2>
         </header>
 
@@ -111,7 +126,7 @@ import { pickLocalized, t } from '../i18n/site'
 
       <section class="guide-section" aria-labelledby="guide-emergency-title" data-reveal>
         <header class="guide-section__head">
-          <p>05 / Emergency</p>
+          <p>06 / Emergency</p>
           <h2 id="guide-emergency-title">{{ t('guide.section.emergency') }}</h2>
         </header>
 
@@ -126,7 +141,7 @@ import { pickLocalized, t } from '../i18n/site'
 
       <section class="guide-section" aria-labelledby="guide-support-title" data-reveal>
         <header class="guide-section__head">
-          <p>06 / Support</p>
+          <p>07 / Support</p>
           <h2 id="guide-support-title">{{ t('guide.section.support') }}</h2>
         </header>
 
@@ -140,7 +155,7 @@ import { pickLocalized, t } from '../i18n/site'
 
       <section class="guide-section" aria-labelledby="guide-faq-title" data-reveal>
         <header class="guide-section__head">
-          <p>07 / FAQ</p>
+          <p>08 / FAQ</p>
           <h2 id="guide-faq-title">{{ t('guide.section.faq') }}</h2>
         </header>
 
@@ -279,6 +294,10 @@ import { pickLocalized, t } from '../i18n/site'
   background: rgba(16, 20, 18, 0.08);
 }
 
+.guide-grid--rules {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .guide-card {
   display: grid;
   gap: 14px;
@@ -411,7 +430,8 @@ import { pickLocalized, t } from '../i18n/site'
 @media (max-width: 920px) {
   .guide-hero__layout,
   .guide-facts,
-  .guide-grid {
+  .guide-grid,
+  .guide-grid--rules {
     grid-template-columns: 1fr;
   }
 }

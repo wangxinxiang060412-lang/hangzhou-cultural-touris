@@ -5,7 +5,7 @@ import { pickLocalized, t } from '../../i18n/site'
 </script>
 
 <template>
-  <section class="travel-impressions" :aria-label="t('visual.indexAria')">
+  <section id="impressions" class="travel-impressions" :aria-label="t('visual.indexAria')">
     <div class="travel-impressions__inner">
       <header class="travel-impressions__heading" data-reveal>
         <div class="travel-impressions__meta">

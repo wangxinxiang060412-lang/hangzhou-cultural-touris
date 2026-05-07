@@ -1,14 +1,20 @@
 import cors from 'cors'
 import { randomUUID } from 'node:crypto'
 import express from 'express'
-import type { Request, Response } from 'express'
+import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
 import { db, initializeDatabase, mapOrderRow } from './db'
 import type { OrderRow, OrderStatus, SlotRow } from './db'
-import { seedBookingSlots, seedOrders, seedScenicSpots, seedTicketTypes } from './data'
+import { seedBookingSlots, seedCityPasses, seedOrders, seedScenicSpots, seedTicketTypes } from './data'
+import { buildOperationsPayload } from './operations'
 
 const app = express()
 const port = Number(process.env.PORT ?? 4174)
+const adminToken = process.env.ADMIN_TOKEN ?? ''
+const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000
 const HANGZHOU_COORDINATES = {
   latitude: 30.27,
@@ -60,8 +66,26 @@ let weatherCache: WeatherCache | null = null
 
 initializeDatabase()
 
-app.use(cors())
-app.use(express.json())
+app.disable('x-powered-by')
+app.use((_request, response, next) => {
+  response.setHeader('X-Content-Type-Options', 'nosniff')
+  response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  response.setHeader('X-Frame-Options', 'DENY')
+  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  next()
+})
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        callback(null, true)
+        return
+      }
+      callback(new Error('CORS origin is not allowed'))
+    },
+  }),
+)
+app.use(express.json({ limit: '64kb' }))
 
 const idSchema = z
   .string()
@@ -73,82 +97,123 @@ const idSchema = z
 const orderStatusSchema = z.enum(['待出行', '已完成', '已取消'])
 
 const tagsSchema = z.array(z.string().trim().min(1).max(24)).max(12)
+const shortTextSchema = z.string().trim().min(1).max(80)
+const optionalMediumTextSchema = z.string().trim().max(240).optional()
+const optionalLongTextSchema = z.string().trim().max(2000).optional()
+const phoneSchema = z
+  .string()
+  .trim()
+  .min(7)
+  .max(20)
+  .regex(/^[0-9+\-\s()]+$/, '手机号格式不正确')
+const identitySchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(32)
+  .regex(/^[A-Za-z0-9()\-_\s]+$/, '证件号格式不正确')
 
 const scenicSpotCreateSchema = z.object({
   id: idSchema.optional(),
-  nameZh: z.string().trim().min(1),
-  nameEn: z.string().trim().min(1),
-  area: z.string().trim().min(1),
-  category: z.string().trim().min(1),
-  description: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  openingHours: z.string().trim().optional(),
+  nameZh: shortTextSchema,
+  nameEn: shortTextSchema,
+  area: shortTextSchema,
+  category: shortTextSchema,
+  description: optionalLongTextSchema,
+  address: optionalMediumTextSchema,
+  openingHours: optionalMediumTextSchema,
   tags: tagsSchema.optional(),
   reservationRequired: z.boolean().optional(),
   paid: z.boolean().optional(),
   featured: z.boolean().optional(),
-})
+}).strict()
 
 const scenicSpotPatchSchema = z.object({
-  nameZh: z.string().trim().min(1).optional(),
-  nameEn: z.string().trim().min(1).optional(),
-  area: z.string().trim().min(1).optional(),
-  category: z.string().trim().min(1).optional(),
-  description: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  openingHours: z.string().trim().optional(),
+  nameZh: shortTextSchema.optional(),
+  nameEn: shortTextSchema.optional(),
+  area: shortTextSchema.optional(),
+  category: shortTextSchema.optional(),
+  description: optionalLongTextSchema,
+  address: optionalMediumTextSchema,
+  openingHours: optionalMediumTextSchema,
   tags: tagsSchema.optional(),
   reservationRequired: z.boolean().optional(),
   paid: z.boolean().optional(),
   featured: z.boolean().optional(),
-})
+}).strict()
 
 const ticketTypeCreateSchema = z.object({
   id: idSchema.optional(),
-  scenicSpotId: z.string().trim().min(1),
-  name: z.string().trim().min(1),
+  scenicSpotId: idSchema,
+  name: shortTextSchema,
   price: z.number().int().min(0).max(1_000_000),
-  description: z.string().trim().optional(),
-  availableFor: z.string().trim().optional(),
-})
+  description: optionalLongTextSchema,
+  availableFor: optionalMediumTextSchema,
+}).strict()
 
 const ticketTypePatchSchema = z.object({
-  scenicSpotId: z.string().trim().min(1).optional(),
-  name: z.string().trim().min(1).optional(),
+  scenicSpotId: idSchema.optional(),
+  name: shortTextSchema.optional(),
   price: z.number().int().min(0).max(1_000_000).optional(),
-  description: z.string().trim().optional(),
-  availableFor: z.string().trim().optional(),
-})
+  description: optionalLongTextSchema,
+  availableFor: optionalMediumTextSchema,
+}).strict()
 
 const bookingSlotCreateSchema = z.object({
   id: idSchema.optional(),
-  scenicSpotId: z.string().trim().min(1),
+  scenicSpotId: idSchema,
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期需为 YYYY-MM-DD'),
-  timeRange: z.string().trim().min(1).max(32),
+  timeRange: z.string().trim().regex(/^\d{2}:\d{2}-\d{2}:\d{2}$/, '时段需为 HH:mm-HH:mm'),
   capacity: z.number().int().min(1).max(10_000),
   booked: z.number().int().min(0).max(10_000).optional(),
-})
+}).strict()
 
 const bookingSlotPatchSchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, '日期需为 YYYY-MM-DD')
     .optional(),
-  timeRange: z.string().trim().min(1).max(32).optional(),
+  timeRange: z.string().trim().regex(/^\d{2}:\d{2}-\d{2}:\d{2}$/, '时段需为 HH:mm-HH:mm').optional(),
   capacity: z.number().int().min(1).max(10_000).optional(),
   booked: z.number().int().min(0).max(10_000).optional(),
-})
+}).strict()
 
 const createOrderSchema = z.object({
-  scenicSpotId: z.string().min(1),
-  slotId: z.string().min(1),
-  ticketName: z.string().min(1),
+  scenicSpotId: idSchema,
+  slotId: idSchema,
+  cityPassId: idSchema.optional(),
+  ticketName: shortTextSchema.optional(),
   paymentMethod: z.enum(['free', 'alipay', 'wechat', 'unionpay']),
-  visitorName: z.string().min(2),
-  visitorPhone: z.string().min(7).max(20),
-  visitorIdNumber: z.string().min(4),
+  visitorName: z.string().trim().min(2).max(40),
+  visitorPhone: phoneSchema,
+  visitorEmail: z.string().email().optional(),
+  visitorIdNumber: identitySchema,
   visitorCount: z.number().int().min(1).max(8),
-})
+}).strict()
+
+const orderPatchSchema = z.object({
+  status: orderStatusSchema,
+  cancellationReason: z.string().trim().max(120).optional(),
+}).strict()
+
+const requireAdminAuth = (request: Request, response: Response, next: NextFunction) => {
+  if (!adminToken) {
+    next()
+    return
+  }
+
+  if (request.header('x-admin-token') === adminToken) {
+    next()
+    return
+  }
+
+  response.status(401).json({ message: '需要管理员授权' })
+}
+
+const routeParam = (request: Request, name: string) => {
+  const value = request.params[name]
+  return Array.isArray(value) ? value[0] ?? '' : value ?? ''
+}
 
 app.get('/api/health', (_request, response) => {
   response.json({
@@ -170,12 +235,33 @@ app.get('/api/weather/hangzhou', async (_request, response) => {
   }
 })
 
+app.get('/api/operations/hangzhou', async (_request, response) => {
+  response.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=240')
+  try {
+    const [weather, spots, slots] = await Promise.all([
+      fetchHangzhouWeather(),
+      Promise.resolve(listScenicSpots()),
+      Promise.resolve(listBookingSlots('')),
+    ])
+    response.json(buildOperationsPayload(spots, slots, weather))
+  } catch (error) {
+    response.status(502).json({
+      message: error instanceof Error ? error.message : '运行状态同步失败',
+    })
+  }
+})
+
 app.get('/api/scenic-spots', (_request, response) => {
   response.json(listScenicSpots())
 })
 
+app.get('/api/city-passes', (_request, response) => {
+  response.json(listCityPasses())
+})
+
 app.get('/api/scenic-spots/:id', (request, response) => {
-  const spot = findScenicSpot(request.params.id)
+  const id = routeParam(request, 'id')
+  const spot = findScenicSpot(id)
   if (!spot) {
     response.status(404).json({ message: '未找到景点' })
     return
@@ -183,7 +269,7 @@ app.get('/api/scenic-spots/:id', (request, response) => {
   response.json(spot)
 })
 
-app.post('/api/scenic-spots', (request, response) => {
+app.post('/api/scenic-spots', requireAdminAuth, (request, response) => {
   handleZod(scenicSpotCreateSchema, request, response, (input) => {
     const id = input.id ?? generateSlugId(input.nameEn)
     if (findScenicSpot(id)) {
@@ -219,8 +305,9 @@ app.post('/api/scenic-spots', (request, response) => {
   })
 })
 
-app.patch('/api/scenic-spots/:id', (request, response) => {
-  const spot = findScenicSpot(request.params.id)
+app.patch('/api/scenic-spots/:id', requireAdminAuth, (request, response) => {
+  const id = routeParam(request, 'id')
+  const spot = findScenicSpot(id)
   if (!spot) {
     response.status(404).json({ message: '未找到景点' })
     return
@@ -244,7 +331,7 @@ app.patch('/api/scenic-spots/:id', (request, response) => {
         WHERE id = @id
       `,
     ).run({
-      id: request.params.id,
+      id,
       nameZh: input.nameZh ?? null,
       nameEn: input.nameEn ?? null,
       area: input.area ?? null,
@@ -259,24 +346,25 @@ app.patch('/api/scenic-spots/:id', (request, response) => {
       featured: input.featured === undefined ? null : Number(input.featured),
     })
 
-    response.json(findScenicSpot(request.params.id))
+    response.json(findScenicSpot(id))
   })
 })
 
-app.delete('/api/scenic-spots/:id', (request, response) => {
-  const spot = findScenicSpot(request.params.id)
+app.delete('/api/scenic-spots/:id', requireAdminAuth, (request, response) => {
+  const id = routeParam(request, 'id')
+  const spot = findScenicSpot(id)
   if (!spot) {
     response.status(404).json({ message: '未找到景点' })
     return
   }
 
-  const activeOrders = countActiveOrdersForSpot(request.params.id)
+  const activeOrders = countActiveOrdersForSpot(id)
   if (activeOrders > 0) {
     response.status(409).json({ message: `景点存在 ${activeOrders} 条未完成订单，无法删除` })
     return
   }
 
-  db.prepare('DELETE FROM scenic_spots WHERE id = ?').run(request.params.id)
+  db.prepare('DELETE FROM scenic_spots WHERE id = ?').run(id)
   response.json({ ok: true })
 })
 
@@ -284,7 +372,7 @@ app.get('/api/ticket-types', (request, response) => {
   response.json(listTicketTypes(typeof request.query.scenicSpotId === 'string' ? request.query.scenicSpotId : ''))
 })
 
-app.post('/api/ticket-types', (request, response) => {
+app.post('/api/ticket-types', requireAdminAuth, (request, response) => {
   handleZod(ticketTypeCreateSchema, request, response, (input) => {
     if (!findScenicSpot(input.scenicSpotId)) {
       response.status(400).json({ message: '关联的景点不存在' })
@@ -315,8 +403,9 @@ app.post('/api/ticket-types', (request, response) => {
   })
 })
 
-app.patch('/api/ticket-types/:id', (request, response) => {
-  const ticket = findTicketType(request.params.id)
+app.patch('/api/ticket-types/:id', requireAdminAuth, (request, response) => {
+  const id = routeParam(request, 'id')
+  const ticket = findTicketType(id)
   if (!ticket) {
     response.status(404).json({ message: '未找到票种' })
     return
@@ -339,7 +428,7 @@ app.patch('/api/ticket-types/:id', (request, response) => {
         WHERE id = @id
       `,
     ).run({
-      id: request.params.id,
+      id,
       scenicSpotId: input.scenicSpotId ?? null,
       name: input.name ?? null,
       price: input.price ?? null,
@@ -347,18 +436,19 @@ app.patch('/api/ticket-types/:id', (request, response) => {
       availableFor: input.availableFor ?? null,
     })
 
-    response.json(findTicketType(request.params.id))
+    response.json(findTicketType(id))
   })
 })
 
-app.delete('/api/ticket-types/:id', (request, response) => {
-  const ticket = findTicketType(request.params.id)
+app.delete('/api/ticket-types/:id', requireAdminAuth, (request, response) => {
+  const id = routeParam(request, 'id')
+  const ticket = findTicketType(id)
   if (!ticket) {
     response.status(404).json({ message: '未找到票种' })
     return
   }
 
-  db.prepare('DELETE FROM ticket_types WHERE id = ?').run(request.params.id)
+  db.prepare('DELETE FROM ticket_types WHERE id = ?').run(id)
   response.json({ ok: true })
 })
 
@@ -366,7 +456,7 @@ app.get('/api/booking-slots', (request, response) => {
   response.json(listBookingSlots(typeof request.query.scenicSpotId === 'string' ? request.query.scenicSpotId : ''))
 })
 
-app.post('/api/booking-slots', (request, response) => {
+app.post('/api/booking-slots', requireAdminAuth, (request, response) => {
   handleZod(bookingSlotCreateSchema, request, response, (input) => {
     if (!findScenicSpot(input.scenicSpotId)) {
       response.status(400).json({ message: '关联的景点不存在' })
@@ -381,6 +471,10 @@ app.post('/api/booking-slots', (request, response) => {
 
     const id = input.id ?? generateSlotId(input.scenicSpotId, input.date, input.timeRange)
     if (findBookingSlot(id)) {
+      response.status(409).json({ message: '相同景点 / 日期 / 时段的入园时段已存在' })
+      return
+    }
+    if (findBookingSlotByWindow(input.scenicSpotId, input.date, input.timeRange)) {
       response.status(409).json({ message: '相同景点 / 日期 / 时段的入园时段已存在' })
       return
     }
@@ -403,8 +497,9 @@ app.post('/api/booking-slots', (request, response) => {
   })
 })
 
-app.patch('/api/booking-slots/:id', (request, response) => {
-  const slot = findBookingSlot(request.params.id)
+app.patch('/api/booking-slots/:id', requireAdminAuth, (request, response) => {
+  const id = routeParam(request, 'id')
+  const slot = findBookingSlot(id)
   if (!slot) {
     response.status(404).json({ message: '未找到入园时段' })
     return
@@ -413,8 +508,21 @@ app.patch('/api/booking-slots/:id', (request, response) => {
   handleZod(bookingSlotPatchSchema, request, response, (input) => {
     const nextCapacity = input.capacity ?? slot.capacity
     const nextBooked = input.booked ?? slot.booked
+    const activeVisitors = countActiveVisitorsForSlot(id)
     if (nextBooked > nextCapacity) {
       response.status(400).json({ message: '基础已约人数不能超过容量' })
+      return
+    }
+    if (nextBooked + activeVisitors > nextCapacity) {
+      response.status(409).json({ message: '容量不能小于基础占用与未取消订单人数之和' })
+      return
+    }
+
+    if (
+      (input.date || input.timeRange) &&
+      findBookingSlotByWindow(slot.scenicSpotId, input.date ?? slot.date, input.timeRange ?? slot.timeRange, slot.id)
+    ) {
+      response.status(409).json({ message: '相同景点 / 日期 / 时段的入园时段已存在' })
       return
     }
 
@@ -428,31 +536,32 @@ app.patch('/api/booking-slots/:id', (request, response) => {
         WHERE id = @id
       `,
     ).run({
-      id: request.params.id,
+      id,
       date: input.date ?? null,
       timeRange: input.timeRange ?? null,
       capacity: input.capacity ?? null,
       booked: input.booked ?? null,
     })
 
-    response.json(findBookingSlot(request.params.id))
+    response.json(findBookingSlot(id))
   })
 })
 
-app.delete('/api/booking-slots/:id', (request, response) => {
-  const slot = findBookingSlot(request.params.id)
+app.delete('/api/booking-slots/:id', requireAdminAuth, (request, response) => {
+  const id = routeParam(request, 'id')
+  const slot = findBookingSlot(id)
   if (!slot) {
     response.status(404).json({ message: '未找到入园时段' })
     return
   }
 
-  const activeOrders = countActiveOrdersForSlot(request.params.id)
+  const activeOrders = countActiveOrdersForSlot(id)
   if (activeOrders > 0) {
     response.status(409).json({ message: `时段有 ${activeOrders} 条未完成订单，无法删除` })
     return
   }
 
-  db.prepare('DELETE FROM booking_slots WHERE id = ?').run(request.params.id)
+  db.prepare('DELETE FROM booking_slots WHERE id = ?').run(id)
   response.json({ ok: true })
 })
 
@@ -475,8 +584,13 @@ app.post('/api/orders', (request, response) => {
 })
 
 app.patch('/api/orders/:id', (request, response) => {
-  handleZod(z.object({ status: orderStatusSchema }), request, response, (input) => {
-    const order = updateOrderStatus(request.params.id, input.status)
+  handleZod(orderPatchSchema, request, response, (input) => {
+    if (input.status !== '已取消' && adminToken && request.header('x-admin-token') !== adminToken) {
+      response.status(401).json({ message: '需要管理员授权' })
+      return
+    }
+
+    const order = updateOrderStatus(routeParam(request, 'id'), input.status, input.cancellationReason)
     if (!order) {
       response.status(404).json({ message: '未找到订单' })
       return
@@ -485,8 +599,8 @@ app.patch('/api/orders/:id', (request, response) => {
   })
 })
 
-app.delete('/api/orders/:id', (request, response) => {
-  const info = db.prepare('DELETE FROM booking_orders WHERE id = ?').run(request.params.id)
+app.delete('/api/orders/:id', requireAdminAuth, (request, response) => {
+  const info = db.prepare('DELETE FROM booking_orders WHERE id = ?').run(routeParam(request, 'id'))
   if (info.changes === 0) {
     response.status(404).json({ message: '未找到订单' })
     return
@@ -494,14 +608,24 @@ app.delete('/api/orders/:id', (request, response) => {
   response.json({ ok: true })
 })
 
-app.post('/api/admin/reset-orders', (_request, response) => {
+app.post('/api/admin/reset-orders', requireAdminAuth, (_request, response) => {
   resetOrders()
   response.json({ ok: true })
 })
 
-app.post('/api/admin/reset-database', (_request, response) => {
+app.post('/api/admin/reset-database', requireAdminAuth, (_request, response) => {
   resetDatabase()
   response.json({ ok: true })
+})
+
+app.use('/api', (_request, response) => {
+  response.status(404).json({ message: 'API endpoint not found' })
+})
+
+app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+  const message = error instanceof Error ? error.message : '服务器内部错误'
+  const status = message.includes('CORS') ? 403 : 500
+  response.status(status).json({ message: status === 500 ? '服务器内部错误' : message })
 })
 
 app.listen(port, () => {
@@ -740,6 +864,10 @@ const findScenicSpot = (id: string) => {
   return row ? mapScenicSpotRow(row) : null
 }
 
+const listCityPasses = () => seedCityPasses
+
+const findCityPassById = (id: string) => seedCityPasses.find((item) => item.id === id) ?? null
+
 const listTicketTypes = (scenicSpotId: string) => {
   if (scenicSpotId) {
     return db
@@ -847,22 +975,60 @@ const findBookingSlot = (id: string) =>
       }
     | undefined
 
+const findBookingSlotByWindow = (
+  scenicSpotId: string,
+  date: string,
+  timeRange: string,
+  excludeId = '',
+) =>
+  db
+    .prepare(
+      `
+        SELECT id
+        FROM booking_slots
+        WHERE scenic_spot_id = ? AND date = ? AND time_range = ? AND (? = '' OR id != ?)
+        LIMIT 1
+      `,
+    )
+    .get(scenicSpotId, date, timeRange, excludeId, excludeId) as { id: string } | undefined
+
 const countActiveOrdersForSlot = (slotId: string) =>
   (
     db
-      .prepare('SELECT COUNT(*) AS count FROM booking_orders WHERE slot_id = ? AND status != ' + "'已取消'")
+      .prepare(`SELECT COUNT(*) AS count FROM booking_orders WHERE slot_id = ? AND status != '已取消'`)
       .get(slotId) as { count: number }
   ).count
 
 const countActiveOrdersForSpot = (scenicSpotId: string) =>
   (
     db
-      .prepare('SELECT COUNT(*) AS count FROM booking_orders WHERE scenic_spot_id = ? AND status != ' + "'已取消'")
+      .prepare(`SELECT COUNT(*) AS count FROM booking_orders WHERE scenic_spot_id = ? AND status != '已取消'`)
       .get(scenicSpotId) as { count: number }
+  ).count
+
+const countActiveVisitorsForSlot = (slotId: string) =>
+  (
+    db
+      .prepare(
+        `
+          SELECT COALESCE(SUM(COALESCE(visitor_count, 1)), 0) AS count
+          FROM booking_orders
+          WHERE slot_id = ? AND status != '已取消'
+        `,
+      )
+      .get(slotId) as { count: number }
   ).count
 
 const createOrder = (input: z.infer<typeof createOrderSchema>) =>
   db.transaction(() => {
+    const cityPass = input.cityPassId ? findCityPassById(input.cityPassId) : null
+    if (!cityPass && !input.ticketName) {
+      throw new Error('请选择单景点票种或组合产品')
+    }
+    if (cityPass && input.scenicSpotId !== cityPass.primarySpotId) {
+      throw new Error('组合产品需从指定激活景点预约入园时段')
+    }
+
     const slot = db
       .prepare(
         `
@@ -897,35 +1063,75 @@ const createOrder = (input: z.infer<typeof createOrderSchema>) =>
     const now = new Date()
     const localDate = formatLocalDate(now)
     const createdAt = formatLocalDateTime(now)
-    const orderId = `HZ-${localDate.split('-').join('')}-${Date.now().toString().slice(-4)}`
+    const orderId = `HZ-${localDate.split('-').join('')}-${randomUUID().slice(0, 8).toUpperCase()}`
     const qrCodeText = `VERIFY-${orderId}`
+    const idType = /[A-Za-z]/.test(input.visitorIdNumber) ? '护照' : '身份证'
+    const maskedIdNumber = maskSensitive(input.visitorIdNumber)
     const visitors =
       input.visitorCount > 1 ? [input.visitorName.trim(), `同行 ${input.visitorCount - 1} 人`] : [input.visitorName.trim()]
-    const ticket = db
-      .prepare(
-        `
-          SELECT price
-          FROM ticket_types
-          WHERE scenic_spot_id = ? AND name = ?
-          LIMIT 1
-        `,
-      )
-      .get(input.scenicSpotId, input.ticketName) as { price: number } | undefined
-    const totalAmount = (ticket?.price ?? 0) * input.visitorCount
+    const companions =
+      input.visitorCount > 1
+        ? [
+            { name: input.visitorName.trim(), credentialStatus: '已核验', idType },
+            ...Array.from({ length: input.visitorCount - 1 }, (_, index) => ({
+              name: `同行人 ${index + 1}`,
+              credentialStatus: '待补充',
+              idType,
+            })),
+          ]
+        : [{ name: input.visitorName.trim(), credentialStatus: '已核验', idType }]
+    const ticket = cityPass
+      ? {
+          price: cityPass.price,
+          name: cityPass.name['zh-CN'],
+        }
+      : (db
+          .prepare(
+            `
+              SELECT price, name
+              FROM ticket_types
+              WHERE scenic_spot_id = ? AND name = ?
+              LIMIT 1
+            `,
+          )
+          .get(input.scenicSpotId, input.ticketName ?? '') as
+          | { price: number; name: string }
+          | undefined)
+    if (!ticket) {
+      throw new Error('票种不存在或已下架')
+    }
+
+    const totalAmount = ticket.price * input.visitorCount
+    if (totalAmount > 0 && input.paymentMethod === 'free') {
+      throw new Error('付费票种不能使用免费预约支付方式')
+    }
+    if (totalAmount === 0 && input.paymentMethod !== 'free') {
+      throw new Error('免费票种无需选择支付渠道')
+    }
+
+    const voucherChannels = [
+      'sms',
+      ...(input.visitorEmail ? ['email'] : []),
+    ]
 
     db.prepare(
       `
         INSERT INTO booking_orders (
-          id, scenic_spot_id, slot_id, ticket_name, visitor_count, payment_method, payment_status, amount, spot_name,
-          visit_date, time_range, visitors_json, status, qr_code_text, created_at
+          id, scenic_spot_id, slot_id, city_pass_id, ticket_name, visitor_count, payment_method, payment_status, amount, spot_name,
+          visit_date, time_range, visitors_json, status, qr_code_text, created_at,
+          contact_phone, contact_email, id_type, masked_id_number, voucher_channels_json,
+          cancellation_reason, refund_status, refund_amount, refund_progress, support_hotline, support_email,
+          appeal_status, appeal_summary, invoice_status, invoice_title, invoice_type, receipt_code,
+          companions_json, last_service_update
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待出行', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待出行', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     ).run(
       orderId,
       input.scenicSpotId,
       input.slotId,
-      input.ticketName,
+      input.cityPassId ?? null,
+      cityPass ? null : ticket.name,
       input.visitorCount,
       input.paymentMethod,
       totalAmount > 0 ? '支付完成' : '免费预约',
@@ -936,27 +1142,97 @@ const createOrder = (input: z.infer<typeof createOrderSchema>) =>
       JSON.stringify(visitors),
       qrCodeText,
       createdAt,
+      input.visitorPhone.trim(),
+      input.visitorEmail?.trim() ?? null,
+      idType,
+      maskedIdNumber,
+      JSON.stringify(voucherChannels),
+      null,
+      '无需退款',
+      null,
+      totalAmount > 0 ? '订单已支付，如需退改可在允许时限内发起取消。' : '免费预约无需退款，可直接凭码核验入园。',
+      '12301',
+      'tickets@hangzhou.example.gov.cn',
+      '可发起',
+      null,
+      totalAmount > 0 ? '可申请' : '已开具',
+      input.visitorName.trim(),
+      '个人',
+      `RCPT-${orderId}`,
+      JSON.stringify(companions),
+      createdAt,
     )
 
     return mapOrderRow(db.prepare('SELECT * FROM booking_orders WHERE id = ?').get(orderId) as OrderRow)
   })()
 
-const updateOrderStatus = (id: string, status: OrderStatus) => {
-  const info = db.prepare('UPDATE booking_orders SET status = ? WHERE id = ?').run(status, id)
+const updateOrderStatus = (id: string, status: OrderStatus, cancellationReason?: string) => {
+  const current = db.prepare('SELECT * FROM booking_orders WHERE id = ?').get(id) as OrderRow | undefined
+  if (!current) return null
+
+  const nextRefundStatus =
+    status === '已取消'
+      ? current.amount && current.amount > 0
+        ? '退款中'
+        : '无需退款'
+      : current.refund_status
+  const nextRefundProgress =
+    status === '已取消'
+      ? current.amount && current.amount > 0
+        ? '已受理取消申请，退款将于 1-3 个工作日内原路退回。'
+        : '免费预约已取消，无需退款。'
+      : current.refund_progress
+
+  const info = db
+    .prepare(
+      `
+        UPDATE booking_orders
+        SET
+          status = ?,
+          cancellation_reason = COALESCE(?, cancellation_reason),
+          refund_status = COALESCE(?, refund_status),
+          refund_progress = COALESCE(?, refund_progress),
+          last_service_update = ?
+        WHERE id = ?
+      `,
+    )
+    .run(
+      status,
+      status === '已取消' ? cancellationReason ?? '行程调整，已由游客主动取消。' : null,
+      nextRefundStatus ?? null,
+      nextRefundProgress ?? null,
+      formatLocalDateTime(new Date()),
+      id,
+    )
   if (info.changes === 0) return null
   const row = db.prepare('SELECT * FROM booking_orders WHERE id = ?').get(id) as OrderRow | undefined
   return row ? mapOrderRow(row) : null
 }
 
+const maskSensitive = (value: string) => {
+  const trimmed = value.trim()
+  if (trimmed.length <= 4) return trimmed
+  if (trimmed.length <= 8) return `${trimmed.slice(0, 2)}${'*'.repeat(trimmed.length - 4)}${trimmed.slice(-2)}`
+  return `${trimmed.slice(0, 4)}${'*'.repeat(Math.max(trimmed.length - 8, 4))}${trimmed.slice(-4)}`
+}
+
 const resetOrders = () => {
   const insertOrder = db.prepare(`
     INSERT INTO booking_orders (
-      id, scenic_spot_id, slot_id, ticket_name, visitor_count, payment_method, payment_status, amount, spot_name,
-      visit_date, time_range, visitors_json, status, qr_code_text, created_at
+      id, scenic_spot_id, slot_id, city_pass_id, ticket_name, visitor_count, payment_method, payment_status, amount, spot_name,
+      visit_date, time_range, visitors_json, status, qr_code_text, created_at,
+      contact_phone, contact_email, id_type, masked_id_number, voucher_channels_json,
+      cancellation_reason, refund_status, refund_amount, refund_progress, support_hotline, support_email,
+      appeal_status, appeal_summary, invoice_status, invoice_title, invoice_type, receipt_code,
+      companions_json, last_service_update
     )
     VALUES (
-      @id, @scenicSpotId, @slotId, @ticketName, @visitorCount, @paymentMethod, @paymentStatus, @amount, @spotName,
-      @visitDate, @timeRange, @visitorsJson, @status, @qrCodeText, @createdAt
+      @id, @scenicSpotId, @slotId, @cityPassId, @ticketName, @visitorCount, @paymentMethod, @paymentStatus, @amount, @spotName,
+      @visitDate, @timeRange, @visitorsJson, @status, @qrCodeText, @createdAt,
+      @contactPhone, @contactEmail, @idType, @maskedIdNumber, @voucherChannelsJson,
+      @cancellationReason, @refundStatus, @refundAmount, @refundProgress, @supportHotline, @supportEmail,
+      @appealStatus, @appealSummary, @invoiceStatus, @invoiceTitle, @invoiceType, @receiptCode,
+      @companionsJson, @lastServiceUpdate
     )
   `)
 
@@ -966,6 +1242,25 @@ const resetOrders = () => {
       insertOrder.run({
         ...order,
         visitorsJson: JSON.stringify(order.visitors),
+        contactPhone: order.contactPhone ?? null,
+        contactEmail: order.contactEmail ?? null,
+        idType: order.idType ?? null,
+        maskedIdNumber: order.maskedIdNumber ?? null,
+        voucherChannelsJson: JSON.stringify(order.voucherChannels ?? []),
+        cancellationReason: order.cancellationReason ?? null,
+        refundStatus: order.refundStatus ?? null,
+        refundAmount: order.refundAmount ?? null,
+        refundProgress: order.refundProgress ?? null,
+        supportHotline: order.supportHotline ?? null,
+        supportEmail: order.supportEmail ?? null,
+        appealStatus: order.appealStatus ?? null,
+        appealSummary: order.appealSummary ?? null,
+        invoiceStatus: order.invoiceStatus ?? null,
+        invoiceTitle: order.invoiceTitle ?? null,
+        invoiceType: order.invoiceType ?? null,
+        receiptCode: order.receiptCode ?? null,
+        companionsJson: JSON.stringify(order.companions ?? []),
+        lastServiceUpdate: order.lastServiceUpdate ?? null,
       })
     })
   })()

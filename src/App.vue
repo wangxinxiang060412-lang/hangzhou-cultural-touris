@@ -135,5 +135,12 @@ onBeforeUnmount(() => {
 <template>
   <a class="skip-link" href="#main-content">{{ t('common.skipToContent') }}</a>
   <SiteHeader />
-  <router-view :key="route.fullPath" />
+  <!--
+    Keying on `route.path` (not `route.fullPath`) so that updates to query —
+    e.g. Booking writing the chosen `?spot=…&ticket=…` — don't tear down and
+    re-mount the page component. Combined with the router's scrollBehavior
+    that awaits a layout pass before restoring savedPosition, this also
+    fixes "browser back doesn't return to my previous scroll position".
+  -->
+  <router-view :key="route.path" />
 </template>

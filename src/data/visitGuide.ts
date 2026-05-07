@@ -19,6 +19,12 @@ export type VisitGuidePolicy = {
   detail: LocalizedText
 }
 
+export type TicketingRule = {
+  id: string
+  title: LocalizedText
+  detail: LocalizedText
+}
+
 export type VisitGuideFaq = {
   id: string
   question: LocalizedText
@@ -240,6 +246,159 @@ export const visitGuidePolicies: VisitGuidePolicy[] = [
       'en-US': 'The flow supports free entry registration, Alipay, WeChat Pay and UnionPay; launch integration should connect each venue’s ticketing system one by one.',
       'ja-JP': '無料入場登録、Alipay、WeChat Pay、UnionPay の導線を用意済み。本番では各施設のチケットシステムと接続します。',
       'ko-KR': '무료 입장 등록, Alipay, WeChat Pay, UnionPay 경로를 마련했습니다. 정식 운영 시 각 명소 티켓 시스템과 연결해야 합니다.',
+    },
+  },
+]
+
+export const ticketingRules: TicketingRule[] = [
+  {
+    id: 'release',
+    title: {
+      'zh-CN': '放票时间',
+      'en-US': 'Ticket Release',
+      'ja-JP': '販売開始',
+      'ko-KR': '판매 시작',
+    },
+    detail: {
+      'zh-CN': '常规时段建议提前 1–7 日开放预约；演出、游船、节庆与热门展馆可按项目提前放票，并在售罄后持续显示余量变化。',
+      'en-US': 'Standard slots should open 1–7 days ahead. Shows, boats, festivals and popular museums may release earlier and should keep availability visible after sell-outs.',
+      'ja-JP': '通常枠は 1〜7 日前の開放を推奨。公演・船便・催事・人気展示館は個別に早期販売し、完売後も残数変動を表示します。',
+      'ko-KR': '일반 시간대는 1~7일 전 예약 오픈을 권장합니다. 공연, 선박, 축제, 인기 전시관은 별도 일정으로 먼저 판매하고 매진 후에도 잔여 변동을 표시합니다.',
+    },
+  },
+  {
+    id: 'refund',
+    title: {
+      'zh-CN': '退改规则',
+      'en-US': 'Refunds & Changes',
+      'ja-JP': '変更・払戻',
+      'ko-KR': '변경 및 환불',
+    },
+    detail: {
+      'zh-CN': '未核验记录可在订单页取消；付费票的可退时间、手续费、不可退项目和改期次数，以景点或项目官方票务规则为准。',
+      'en-US': 'Unused records can be cancelled from My Orders. Refund windows, fees, non-refundable items and reschedule limits follow each venue or product rule.',
+      'ja-JP': '未使用記録は予約記録ページで取消可能。有料券の払戻期限、手数料、不可払戻項目、変更回数は各施設・商品の規則に従います。',
+      'ko-KR': '미사용 기록은 내 예약에서 취소할 수 있습니다. 유료권의 환불 가능 시간, 수수료, 환불 불가 항목, 변경 횟수는 각 명소 또는 상품 규정을 따릅니다.',
+    },
+  },
+  {
+    id: 'concessions',
+    title: {
+      'zh-CN': '优惠资格',
+      'en-US': 'Concessions',
+      'ja-JP': '優待資格',
+      'ko-KR': '우대 자격',
+    },
+    detail: {
+      'zh-CN': '儿童、老人、学生、残障人士等优惠票应单独选择对应票种；入园时需携带可核验的年龄、学籍或残障证明。',
+      'en-US': 'Children, seniors, students and visitors with disabilities should choose the matching concession type and bring verifiable proof on entry.',
+      'ja-JP': '子ども・高齢者・学生・障がいのある方は該当する優待券種を選択し、入場時に確認可能な証明をご提示ください。',
+      'ko-KR': '어린이, 노인, 학생, 장애인은 해당 우대 권종을 선택하고 입장 시 확인 가능한 증빙을 지참해야 합니다.',
+    },
+  },
+  {
+    id: 'identity',
+    title: {
+      'zh-CN': '证件要求',
+      'en-US': 'ID Requirements',
+      'ja-JP': '証明書要件',
+      'ko-KR': '신분증 요건',
+    },
+    detail: {
+      'zh-CN': '实名办理建议支持身份证、护照、港澳台居民证件等有效证件；填写信息需与入园核验证件保持一致。',
+      'en-US': 'Real-name booking should support valid IDs such as Chinese ID cards, passports and Hong Kong / Macao / Taiwan travel documents. Entry ID must match booking details.',
+      'ja-JP': '実名手続きでは中国身分証、パスポート、香港・マカオ・台湾関連証明などを想定し、入場時の証明書と予約情報を一致させます。',
+      'ko-KR': '실명 예약은 중국 신분증, 여권, 홍콩·마카오·대만 관련 증명 등 유효 신분증을 지원해야 하며 입장 시 증명 정보와 예약 정보가 일치해야 합니다.',
+    },
+  },
+  {
+    id: 'visitor-limit',
+    title: {
+      'zh-CN': '最大人数',
+      'en-US': 'Group Size',
+      'ja-JP': '最大人数',
+      'ko-KR': '최대 인원',
+    },
+    detail: {
+      'zh-CN': '单笔订单建议限制 1–8 人；超过上限的团队、研学或旅行社订单，应进入团体预约或人工服务通道。',
+      'en-US': 'Limit one order to 1–8 visitors. Larger groups, study tours or travel agencies should use a group booking or assisted-service channel.',
+      'ja-JP': '1 件あたり 1〜8 名を推奨。上限を超える団体、研学、旅行会社予約は団体予約または有人対応へ誘導します。',
+      'ko-KR': '주문 1건은 1~8명으로 제한하는 것을 권장합니다. 초과하는 단체, 교육 여행, 여행사 주문은 단체 예약 또는 수동 서비스 채널로 안내합니다.',
+    },
+  },
+  {
+    id: 'real-name',
+    title: {
+      'zh-CN': '实名制说明',
+      'en-US': 'Real-name Booking',
+      'ja-JP': '実名予約',
+      'ko-KR': '실명 예약',
+    },
+    detail: {
+      'zh-CN': '涉及分时、演出、展馆、游船或安全限流的项目，应逐人登记真实姓名、联系方式与证件信息，必要时逐人核验。',
+      'en-US': 'Timed-entry, shows, museums, boats and capacity-managed items should collect real names, contact details and IDs for each visitor when required.',
+      'ja-JP': '時間帯入場、公演、展示館、船便、安全上の定員管理対象では、必要に応じて来訪者ごとの氏名・連絡先・証明情報を登録します。',
+      'ko-KR': '시간대 입장, 공연, 전시관, 선박, 안전상 인원 관리 대상은 필요 시 방문자별 실명, 연락처, 신분 정보를 등록해야 합니다.',
+    },
+  },
+  {
+    id: 'verification',
+    title: {
+      'zh-CN': '入园核验',
+      'en-US': 'Entry Check',
+      'ja-JP': '入場確認',
+      'ko-KR': '입장 확인',
+    },
+    detail: {
+      'zh-CN': '入园时可通过二维码、订单号或证件核验；优惠票、免票和实名票应同时核验对应资格材料。',
+      'en-US': 'Entry can be checked by QR code, order number or ID. Concession, free-entry and real-name tickets should verify eligibility proof at the same time.',
+      'ja-JP': '入場時は QR コード、注文番号、証明書で確認します。優待・無料・実名券は資格証明も同時に確認します。',
+      'ko-KR': '입장 시 QR 코드, 주문 번호 또는 신분증으로 확인합니다. 우대권, 무료권, 실명권은 자격 증빙도 함께 확인해야 합니다.',
+    },
+  },
+  {
+    id: 'late',
+    title: {
+      'zh-CN': '迟到处理',
+      'en-US': 'Late Arrival',
+      'ja-JP': '遅刻対応',
+      'ko-KR': '지각 처리',
+    },
+    detail: {
+      'zh-CN': '建议按所选时段提前 15–30 分钟到达；迟到宽限、改签、补票或人工处理，以现场秩序和景点规则为准。',
+      'en-US': 'Arrive 15–30 minutes before the selected slot. Grace periods, rescheduling, on-site tickets or manual handling follow on-site flow and venue rules.',
+      'ja-JP': '選択時間の 15〜30 分前到着を推奨。遅刻猶予、変更、当日券、有人対応は現地運用と施設規則に従います。',
+      'ko-KR': '선택한 시간대 15~30분 전 도착을 권장합니다. 지각 유예, 변경, 현장권, 수동 처리는 현장 운영과 명소 규정을 따릅니다.',
+    },
+  },
+  {
+    id: 'holiday-capacity',
+    title: {
+      'zh-CN': '节假日限流',
+      'en-US': 'Holiday Capacity',
+      'ja-JP': '祝休日の制限',
+      'ko-KR': '공휴일 인원 제한',
+    },
+    detail: {
+      'zh-CN': '法定节假日、大型活动、恶劣天气和高峰客流期间，景点可启动临时限流、分批入园、交通管制或停止现场售票。',
+      'en-US': 'During holidays, major events, severe weather and peak crowds, venues may activate temporary capacity control, batch entry, traffic control or suspend on-site sales.',
+      'ja-JP': '祝休日、大型催事、悪天候、混雑時には、臨時定員管理、分批入場、交通規制、現地販売停止が行われる場合があります。',
+      'ko-KR': '법정 공휴일, 대형 행사, 악천후, 혼잡 시에는 임시 인원 제한, 순차 입장, 교통 통제, 현장 판매 중단이 시행될 수 있습니다.',
+    },
+  },
+  {
+    id: 'sold-out',
+    title: {
+      'zh-CN': '售罄建议',
+      'en-US': 'Sold-out Options',
+      'ja-JP': '完売時の案内',
+      'ko-KR': '매진 시 안내',
+    },
+    detail: {
+      'zh-CN': '当前时段售罄时，应优先推荐临近时段、相邻日期、同区域景点或无需预约的开放点位，并提示关注退票释放。',
+      'en-US': 'When a slot is sold out, suggest nearby slots, adjacent dates, same-area spots or open-entry alternatives, and remind visitors to watch for released cancellations.',
+      'ja-JP': '該当時間帯が完売の場合、近い時間帯、隣接日、同エリアの景点、予約不要の開放地点を案内し、取消分の再放出も提示します。',
+      'ko-KR': '현재 시간대가 매진되면 인근 시간대, 인접 날짜, 같은 지역 명소, 예약 불필요 개방 지점을 우선 추천하고 취소분 재오픈을 안내합니다.',
     },
   },
 ]

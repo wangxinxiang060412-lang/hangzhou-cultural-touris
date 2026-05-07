@@ -33,7 +33,6 @@
 html {
   background: var(--paper-light);
   color: var(--ink);
-  scroll-behavior: smooth;
 }
 
 body {

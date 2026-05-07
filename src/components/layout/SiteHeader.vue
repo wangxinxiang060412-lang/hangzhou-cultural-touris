@@ -6,11 +6,12 @@ import { localeOptions, setSiteLocale, siteLocale, t } from '../../i18n/site'
 const route = useRoute()
 const isHome = computed(() => route.name === 'home')
 const isReservationRoute = computed(() =>
-  ['scenic-spots', 'scenic-spot-detail', 'booking', 'orders'].includes(String(route.name)),
+  ['scenic-spots', 'scenic-spot-detail', 'booking'].includes(String(route.name)),
 )
 const navItems = computed(() => [
   { label: t('nav.home'), to: '/', note: t('nav.note.home') },
   { label: t('nav.reservations'), to: '/scenic-spots', note: t('nav.note.reservations') },
+  { label: t('nav.orders'), to: '/orders', note: t('nav.note.orders') },
   { label: t('nav.routes'), to: '/routes', note: t('nav.note.routes') },
   { label: t('page.visitGuide'), to: '/visit-guide', note: t('nav.note.visitGuide') },
 ])

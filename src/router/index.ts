@@ -4,9 +4,11 @@ import type { RouteLocationNormalized, RouterScrollBehavior } from 'vue-router'
 
 import Home from '../pages/Home.vue'
 import { siteLocale, t } from '../i18n/site'
+import { getHeaderOffset } from '../utils/scroll'
 
 const Admin = () => import('../pages/Admin.vue')
 const Booking = () => import('../pages/Booking.vue')
+const CityPasses = () => import('../pages/CityPasses.vue')
 const NotFound = () => import('../pages/NotFound.vue')
 const Orders = () => import('../pages/Orders.vue')
 const Routes = () => import('../pages/Routes.vue')
@@ -14,20 +16,46 @@ const ScenicSpotDetail = () => import('../pages/ScenicSpotDetail.vue')
 const ScenicSpots = () => import('../pages/ScenicSpots.vue')
 const VisitGuide = () => import('../pages/VisitGuide.vue')
 
-const scrollBehavior: RouterScrollBehavior = (to, _from, savedPosition) => {
+const waitForLayout = () =>
+  new Promise<void>((resolve) => {
+    if (typeof window === 'undefined') return resolve()
+    // Two rAFs ≈ one paint after the new view is mounted; gives async data
+    // (catalog, orders, slots…) a chance to fill the page so the saved
+    // scroll position is no longer clamped to a near-empty document.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve())
+    })
+  })
+
+const scrollBehavior: RouterScrollBehavior = async (to, from, savedPosition) => {
+  // Browser back / forward — restore exactly where the user left off, but
+  // wait for the new page's DOM to settle first so the document is tall
+  // enough for the saved scrollY to land correctly.
   if (savedPosition) {
+    await waitForLayout()
     return savedPosition
   }
 
+  // Anchor jump within / across pages — keep a smooth scroll for hashes,
+  // but compensate the sticky header height once.
   if (to.hash) {
     return {
       el: to.hash,
-      top: 72,
+      top: getHeaderOffset(),
       behavior: 'smooth',
     }
   }
 
-  return { top: 0, behavior: 'smooth' }
+  // Re-clicking the link of the page you're already on — silently snap to
+  // the top so the click never feels dead.
+  if (from && to.path === from.path && to.hash === from.hash) {
+    return { top: 0, left: 0 }
+  }
+
+  // Fresh navigation between pages — instant jump to the top, the way every
+  // standard website behaves. No more "smooth-scroll back to the top, then
+  // swap pages" wobble.
+  return { top: 0, left: 0 }
 }
 
 const router = createRouter({
@@ -54,6 +82,12 @@ const router = createRouter({
       name: 'scenic-spot-detail',
       component: ScenicSpotDetail,
       meta: { titleKey: 'scenic.title' },
+    },
+    {
+      path: '/city-passes',
+      name: 'city-passes',
+      component: CityPasses,
+      meta: { titleKey: 'page.cityPasses' },
     },
     {
       path: '/booking',

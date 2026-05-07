@@ -9,7 +9,6 @@ const router = useRouter()
 const goToAnchor = async (anchor: string) => {
   if (route.name !== 'home') {
     await router.push({ path: '/', hash: `#${anchor}` })
-    requestAnimationFrame(() => scrollToAnchor(anchor))
     return
   }
 
@@ -40,9 +39,12 @@ const year = new Date().getFullYear()
             <li><button type="button" @click="goToAnchor('opening')">{{ t('footer.opening') }}</button></li>
             <li><button type="button" @click="goToAnchor('notices')">{{ t('footer.notices') }}</button></li>
             <li><button type="button" @click="goToAnchor('concept')">{{ t('footer.intro') }}</button></li>
+            <li><button type="button" @click="goToAnchor('weather')">{{ t('footer.weather') }}</button></li>
             <li><button type="button" @click="goToAnchor('reservations')">{{ t('footer.reservations') }}</button></li>
+            <li><button type="button" @click="goToAnchor('seasons')">{{ t('footer.seasons') }}</button></li>
             <li><button type="button" @click="goToAnchor('places')">{{ t('footer.places') }}</button></li>
             <li><button type="button" @click="goToAnchor('routes')">{{ t('footer.routes') }}</button></li>
+            <li><button type="button" @click="goToAnchor('impressions')">{{ t('footer.impressions') }}</button></li>
           </ul>
         </nav>
 

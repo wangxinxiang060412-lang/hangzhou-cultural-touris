@@ -121,6 +121,12 @@ const messages: Record<string, LocalizedText> = {
     'ja-JP': '入場とチケット',
     'ko-KR': '입장 및 티켓',
   },
+  'nav.note.orders': {
+    'zh-CN': '预约记录',
+    'en-US': 'Reservations',
+    'ja-JP': '予約記録',
+    'ko-KR': '예약 기록',
+  },
   'nav.note.routes': {
     'zh-CN': '慢游路线',
     'en-US': 'Slow Routes',
@@ -200,17 +206,23 @@ const messages: Record<string, LocalizedText> = {
     'ja-JP': '02 — 概要',
     'ko-KR': '02 — 개요',
   },
+  'footer.weather': {
+    'zh-CN': '03 — 天气',
+    'en-US': '03 — Weather',
+    'ja-JP': '03 — 天気',
+    'ko-KR': '03 — 날씨',
+  },
   'footer.seasons': {
-    'zh-CN': '03 — 四时',
-    'en-US': '03 — Seasons',
-    'ja-JP': '03 — 四季',
-    'ko-KR': '03 — 사계',
+    'zh-CN': '05 — 四时',
+    'en-US': '05 — Seasons',
+    'ja-JP': '05 — 四季',
+    'ko-KR': '05 — 사계',
   },
   'footer.reservations': {
-    'zh-CN': '03 — 票务',
-    'en-US': '03 — Tickets',
-    'ja-JP': '03 — チケット',
-    'ko-KR': '03 — 티켓',
+    'zh-CN': '04 — 票务',
+    'en-US': '04 — Tickets',
+    'ja-JP': '04 — チケット',
+    'ko-KR': '04 — 티켓',
   },
   'footer.reveal': {
     'zh-CN': '04 — 显影',
@@ -219,22 +231,22 @@ const messages: Record<string, LocalizedText> = {
     'ko-KR': '04 — 레이어',
   },
   'footer.places': {
-    'zh-CN': '04 — 景点',
-    'en-US': '04 — Places',
-    'ja-JP': '04 — 見どころ',
-    'ko-KR': '04 — 명소',
+    'zh-CN': '06 — 景点',
+    'en-US': '06 — Places',
+    'ja-JP': '06 — 見どころ',
+    'ko-KR': '06 — 명소',
   },
   'footer.routes': {
-    'zh-CN': '05 — 漫游',
-    'en-US': '05 — Routes',
-    'ja-JP': '05 — 周遊',
-    'ko-KR': '05 — 루트',
+    'zh-CN': '07 — 漫游',
+    'en-US': '07 — Routes',
+    'ja-JP': '07 — 周遊',
+    'ko-KR': '07 — 루트',
   },
   'footer.impressions': {
-    'zh-CN': '07 — 意象',
-    'en-US': '07 — Impressions',
-    'ja-JP': '07 — 印象',
-    'ko-KR': '07 — 인상',
+    'zh-CN': '08 — 意象',
+    'en-US': '08 — Impressions',
+    'ja-JP': '08 — 印象',
+    'ko-KR': '08 — 인상',
   },
   'footer.brandLine': {
     'zh-CN': '杭州文旅',
@@ -350,6 +362,12 @@ const messages: Record<string, LocalizedText> = {
     'en-US': 'Slow Routes',
     'ja-JP': '周遊ルート',
     'ko-KR': '추천 루트',
+  },
+  'page.cityPasses': {
+    'zh-CN': '城市组合票',
+    'en-US': 'City Passes',
+    'ja-JP': 'シティパス',
+    'ko-KR': '시티 패스',
   },
   'page.archive': {
     'zh-CN': '旅行档案',
@@ -1462,17 +1480,29 @@ const messages: Record<string, LocalizedText> = {
     'ja-JP': '訪問ガイド全文へ',
     'ko-KR': '전체 방문 안내 보기',
   },
+  'detail.rules.eyebrow': {
+    'zh-CN': '三 / 官方规则',
+    'en-US': 'III / Official Rules',
+    'ja-JP': '三 / 公式規則',
+    'ko-KR': '三 / 공식 규정',
+  },
+  'detail.rules.title': {
+    'zh-CN': '票务规则',
+    'en-US': 'Ticketing Rules',
+    'ja-JP': 'チケット規則',
+    'ko-KR': '티켓 규정',
+  },
   'detail.section.tickets.label': {
-    'zh-CN': '一 / 票种',
-    'en-US': 'I / Tickets',
-    'ja-JP': '一 / 券種',
-    'ko-KR': '一 / 권종',
+    'zh-CN': '四 / 票种',
+    'en-US': 'IV / Tickets',
+    'ja-JP': '四 / 券種',
+    'ko-KR': '四 / 권종',
   },
   'detail.section.slots.label': {
-    'zh-CN': '二 / 时间段',
-    'en-US': 'II / Time Slots',
-    'ja-JP': '二 / 時間帯',
-    'ko-KR': '二 / 시간대',
+    'zh-CN': '五 / 时间段',
+    'en-US': 'V / Time Slots',
+    'ja-JP': '五 / 時間帯',
+    'ko-KR': '五 / 시간대',
   },
   'detail.section.tickets.title': {
     'zh-CN': '票种',
@@ -1643,6 +1673,12 @@ const messages: Record<string, LocalizedText> = {
     'en-US': 'Entry & Ticketing Policy',
     'ja-JP': '入場・チケット案内',
     'ko-KR': '입장 및 티켓 정책',
+  },
+  'guide.section.ticketRules': {
+    'zh-CN': '官方票务规则',
+    'en-US': 'Official Ticketing Rules',
+    'ja-JP': '公式チケット規則',
+    'ko-KR': '공식 티켓 규정',
   },
   'guide.section.transport': {
     'zh-CN': '交通到达',
@@ -1825,6 +1861,12 @@ const messages: Record<string, LocalizedText> = {
     'ja-JP': '現在の選択：{name}。開放告知、券種、日付、時間帯を確認のうえ、来訪者情報をご入力ください。',
     'ko-KR': '현재 선택: {name}. 개방 공지, 권종, 날짜, 시간대를 확인한 뒤 방문자 정보를 입력하세요.',
   },
+  'booking.heroUnselected': {
+    'zh-CN': '请先选择需要办理的景点，再确认票种、日期与时段。这样进入下一步时，信息会更清楚也更不容易选错。',
+    'en-US': 'Choose the scenic spot first, then confirm the ticket type, date and time slot so the rest of the booking flow stays clear.',
+    'ja-JP': 'まず手続きを行う景点を選択し、その後に券種・日付・時間帯をご確認ください。次の手順でも内容が分かりやすくなります。',
+    'ko-KR': '먼저 처리할 명소를 선택한 뒤 권종, 날짜, 시간대를 확인해 주세요. 그래야 다음 단계에서도 정보가 더 분명합니다.',
+  },
   'booking.heroLoading': {
     'zh-CN': '加载中',
     'en-US': 'Loading',
@@ -1836,6 +1878,24 @@ const messages: Record<string, LocalizedText> = {
     'en-US': 'Ticketing policy',
     'ja-JP': 'チケット案内',
     'ko-KR': '티켓 정책',
+  },
+  'booking.rules.eyebrow': {
+    'zh-CN': 'Official Ticketing Rules',
+    'en-US': 'Official Ticketing Rules',
+    'ja-JP': 'Official Ticketing Rules',
+    'ko-KR': 'Official Ticketing Rules',
+  },
+  'booking.rules.title': {
+    'zh-CN': '办理前请确认这些规则',
+    'en-US': 'Confirm These Rules Before Booking',
+    'ja-JP': '手続き前に確認する規則',
+    'ko-KR': '처리 전 확인할 규정',
+  },
+  'booking.rules.description': {
+    'zh-CN': '以下规则覆盖放票、退改、优惠、实名、核验、迟到、限流与售罄替代建议。具体执行以对应景点和项目的官方公告为准。',
+    'en-US': 'These rules cover ticket release, refunds, concessions, real-name booking, entry checks, late arrival, capacity control and sold-out alternatives. Final handling follows each venue notice.',
+    'ja-JP': '販売開始、変更払戻、優待、実名、入場確認、遅刻、定員管理、完売時の代替案をまとめています。具体運用は各施設・商品の公式告知に準じます。',
+    'ko-KR': '판매 시작, 환불, 우대, 실명, 입장 확인, 지각, 인원 제한, 매진 대안을 포함합니다. 구체적인 처리는 각 명소와 상품의 공식 공지를 따릅니다.',
   },
   'booking.flowAria': {
     'zh-CN': '办理步骤',
@@ -1854,6 +1914,12 @@ const messages: Record<string, LocalizedText> = {
     'en-US': 'Scenic Spot',
     'ja-JP': 'Scenic Spot',
     'ko-KR': 'Scenic Spot',
+  },
+  'booking.placeholder.spot': {
+    'zh-CN': '请选择景点',
+    'en-US': 'Choose a scenic spot',
+    'ja-JP': '景点を選択してください',
+    'ko-KR': '명소를 선택해 주세요',
   },
   'booking.section.ticket': {
     'zh-CN': '一 / 票种',
@@ -1920,6 +1986,18 @@ const messages: Record<string, LocalizedText> = {
     'en-US': 'Make sure name, contact and ID details are accurate; concession, free-entry and real-name checks follow each venue’s official rules.',
     'ja-JP': '氏名・連絡先・身分情報を正確にご入力ください。優待・無料入場・実名確認は各施設の公式規則に準じます。',
     'ko-KR': '이름, 연락처, 신분 정보를 정확히 입력하세요. 우대, 무료 입장, 실명 확인은 각 명소 공식 규정을 따릅니다.',
+  },
+  'booking.selectSpotHint': {
+    'zh-CN': '先选择景点后，这里会加载对应的票种。',
+    'en-US': 'Choose a scenic spot first to load its ticket types.',
+    'ja-JP': '先に景点を選ぶと、ここに対応する券種が表示されます。',
+    'ko-KR': '먼저 명소를 선택하면 여기에 해당 권종이 표시됩니다.',
+  },
+  'booking.selectSlotHint': {
+    'zh-CN': '先选择景点后，这里会显示可预约的日期与时间段。',
+    'en-US': 'Choose a scenic spot first to see available dates and time slots.',
+    'ja-JP': '先に景点を選ぶと、利用可能な日付と時間帯が表示されます。',
+    'ko-KR': '먼저 명소를 선택하면 이용 가능한 날짜와 시간대가 표시됩니다.',
   },
   'booking.payment.freeNote': {
     'zh-CN': '确认后生成到访登记凭证',
@@ -2290,6 +2368,106 @@ messages['admin.title'] = {
   'en-US': 'Ticketing Admin',
   'ja-JP': 'チケット管理',
   'ko-KR': '티켓 관리 콘솔',
+}
+
+// === Detail page: sticky sub-navigation under the hero ====================
+messages['detail.subnav.aria'] = {
+  'zh-CN': '景点详情区块导航',
+  'en-US': 'Section navigation',
+  'ja-JP': 'セクションナビゲーション',
+  'ko-KR': '섹션 내비게이션',
+}
+messages['detail.subnav.overview'] = {
+  'zh-CN': '概览',
+  'en-US': 'Overview',
+  'ja-JP': '概要',
+  'ko-KR': '개요',
+}
+messages['detail.subnav.tickets'] = {
+  'zh-CN': '票务',
+  'en-US': 'Tickets',
+  'ja-JP': 'チケット',
+  'ko-KR': '티켓',
+}
+messages['detail.subnav.practical'] = {
+  'zh-CN': '实用信息',
+  'en-US': 'Practical',
+  'ja-JP': '実用情報',
+  'ko-KR': '실용 정보',
+}
+messages['detail.subnav.accessibility'] = {
+  'zh-CN': '无障碍',
+  'en-US': 'Accessibility',
+  'ja-JP': 'バリアフリー',
+  'ko-KR': '접근성',
+}
+messages['detail.subnav.rules'] = {
+  'zh-CN': '规则与公告',
+  'en-US': 'Rules & Notices',
+  'ja-JP': 'ルール・お知らせ',
+  'ko-KR': '규정 및 공지',
+}
+
+// === Detail page: sticky reservation rail / mobile bottom bar =============
+messages['detail.rail.title'] = {
+  'zh-CN': '票务速览',
+  'en-US': 'Reservation snapshot',
+  'ja-JP': 'チケット概要',
+  'ko-KR': '예약 요약',
+}
+messages['detail.rail.priceFrom'] = {
+  'zh-CN': '价格 ¥{price} 起',
+  'en-US': 'From ¥{price}',
+  'ja-JP': '¥{price} から',
+  'ko-KR': '¥{price} 부터',
+}
+messages['detail.rail.priceFree'] = {
+  'zh-CN': '免费预约',
+  'en-US': 'Free entry',
+  'ja-JP': '無料入場',
+  'ko-KR': '무료 입장',
+}
+messages['detail.rail.todayAvailable'] = {
+  'zh-CN': '今日尚可预约',
+  'en-US': 'Available today',
+  'ja-JP': '本日予約可',
+  'ko-KR': '오늘 예약 가능',
+}
+messages['detail.rail.todayFull'] = {
+  'zh-CN': '今日已约满',
+  'en-US': 'Today is fully booked',
+  'ja-JP': '本日は満席',
+  'ko-KR': '오늘은 마감',
+}
+messages['detail.rail.upcoming'] = {
+  'zh-CN': '最近可约 {date} {timeRange}',
+  'en-US': 'Next slot {date} {timeRange}',
+  'ja-JP': '次の枠 {date} {timeRange}',
+  'ko-KR': '다음 시간대 {date} {timeRange}',
+}
+messages['detail.rail.empty'] = {
+  'zh-CN': '暂无可预约时段',
+  'en-US': 'No bookable slots yet',
+  'ja-JP': '予約可能な枠はまだありません',
+  'ko-KR': '예약 가능한 시간대가 없습니다',
+}
+messages['detail.rail.openVisit'] = {
+  'zh-CN': '免费开放参观',
+  'en-US': 'Open access — no booking needed',
+  'ja-JP': '無料開放、予約不要',
+  'ko-KR': '자유 입장, 예약 불필요',
+}
+messages['detail.rail.viewTickets'] = {
+  'zh-CN': '查看全部票种',
+  'en-US': 'See all tickets',
+  'ja-JP': '全てのチケットを見る',
+  'ko-KR': '모든 티켓 보기',
+}
+messages['detail.rail.viewSlots'] = {
+  'zh-CN': '查看可约时段',
+  'en-US': 'See available slots',
+  'ja-JP': '予約可能な枠を見る',
+  'ko-KR': '예약 가능한 시간대',
 }
 
 const interpolate = (template: string, vars?: Record<string, string | number>) => {

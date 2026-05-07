@@ -3,12 +3,14 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
-import { visitGuidePolicies } from '../data/visitGuide'
+import { useSmartBack } from '../composables/useSmartBack'
+import { ticketingRules, visitGuidePolicies } from '../data/visitGuide'
 import type { BookingPaymentMethod } from '../data/mockOrders'
+import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, t } from '../i18n/site'
 import { createBookingOrder, fetchBookingSlots, fetchTicketTypes } from '../services/api'
 import type { ApiBookingSlot, ApiTicketType } from '../services/api'
-import { ensureCatalog, scenicSpots } from '../stores/catalog'
+import { cityPasses, ensureCatalog, scenicSpots } from '../stores/catalog'
 import { formatLocalDate } from '../utils/date'
 import {
   localizeSpotArea,
@@ -20,14 +22,23 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const { goBack } = useSmartBack('/scenic-spots')
+const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
+  'zh-CN': zh,
+  'en-US': en,
+  'ja-JP': ja,
+  'ko-KR': ko,
+})
 
 const step = ref(1)
 const selectedSpotId = ref('')
+const selectedCityPassId = ref('')
 const selectedTicketId = ref('')
 const selectedSlotId = ref('')
 const selectedPaymentMethod = ref<BookingPaymentMethod>('free')
 const visitorName = ref('')
 const visitorPhone = ref('')
+const visitorEmail = ref('')
 const visitorIdNumber = ref('')
 const visitorCount = ref(1)
 const submittedOrderId = ref('')
@@ -43,6 +54,10 @@ const requestedSpotId = computed(() => {
   const value = route.query.spot
   return typeof value === 'string' ? value : ''
 })
+const requestedPassId = computed(() => {
+  const value = route.query.pass
+  return typeof value === 'string' ? value : ''
+})
 const requestedTicketId = computed(() => {
   const value = route.query.ticket
   return typeof value === 'string' ? value : ''
@@ -52,16 +67,18 @@ const requestedSlotId = computed(() => {
   return typeof value === 'string' ? value : ''
 })
 
-const selectedSpot = computed(
-  () =>
-    scenicSpots.value.find((spot) => spot.id === selectedSpotId.value) ??
-    scenicSpots.value[0] ??
-    null,
+const selectedSpot = computed(() => scenicSpots.value.find((spot) => spot.id === selectedSpotId.value) ?? null)
+const selectedCityPass = computed(
+  () => cityPasses.value.find((cityPass) => cityPass.id === selectedCityPassId.value) ?? null,
 )
 const selectedTicket = computed(() => tickets.value.find((ticket) => ticket.id === selectedTicketId.value))
 const selectedSlot = computed(() => slots.value.find((slot) => slot.id === selectedSlotId.value))
 const selectedSlotRemaining = computed(() => selectedSlot.value?.remaining ?? 0)
-const totalAmount = computed(() => (selectedTicket.value?.price ?? 0) * visitorCount.value)
+const totalAmount = computed(
+  () => (selectedCityPass.value?.price ?? selectedTicket.value?.price ?? 0) * visitorCount.value,
+)
+const hasSelectedSpot = computed(() => Boolean(selectedSpotId.value))
+const isCityPassMode = computed(() => Boolean(selectedCityPass.value))
 
 const visitorCountIsValid = computed(
   () =>
@@ -71,6 +88,9 @@ const visitorCountIsValid = computed(
     visitorCount.value <= 8,
 )
 const phoneIsValid = computed(() => /^[0-9+\-\s]{7,20}$/.test(visitorPhone.value.trim()))
+const emailIsValid = computed(
+  () => visitorEmail.value.trim().length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(visitorEmail.value.trim()),
+)
 const idNumberIsValid = computed(() => visitorIdNumber.value.trim().length >= 4)
 const paymentMethodIsValid = computed(
   () => totalAmount.value === 0 || selectedPaymentMethod.value !== 'free',
@@ -86,12 +106,13 @@ const paymentMethodOptions = computed(() =>
       ],
 )
 
-const canGoStep2 = computed(() => Boolean(selectedTicketId.value && selectedSlotId.value))
+const canGoStep2 = computed(() => Boolean((selectedCityPassId.value || selectedTicketId.value) && selectedSlotId.value))
 const canSubmit = computed(
   () =>
     canGoStep2.value &&
     visitorName.value.trim().length > 1 &&
     phoneIsValid.value &&
+    emailIsValid.value &&
     idNumberIsValid.value &&
     visitorCountIsValid.value &&
     paymentMethodIsValid.value &&
@@ -100,9 +121,15 @@ const canSubmit = computed(
 )
 
 const totalText = computed(() => {
-  if (!selectedTicket.value) return t('booking.summary.toBeSelected')
+  if (!selectedTicket.value && !selectedCityPass.value) return t('booking.summary.toBeSelected')
   if (totalAmount.value === 0) return t('booking.payment.free')
   return `¥${totalAmount.value}`
+})
+
+const selectedProductName = computed(() => {
+  if (selectedCityPass.value) return pickLocalized(selectedCityPass.value.name)
+  if (selectedTicket.value) return localizeTicketName(selectedTicket.value)
+  return t('booking.summary.notSelected')
 })
 
 const paymentMethodText = computed(() => {
@@ -118,23 +145,64 @@ const paymentMethodText = computed(() => {
   }
 })
 
+const syncBookingQuery = async (patch: Record<string, string | undefined>) => {
+  const nextQuery = { ...route.query } as Record<string, string>
+
+  Object.entries(patch).forEach(([key, value]) => {
+    if (value) {
+      nextQuery[key] = value
+    } else {
+      delete nextQuery[key]
+    }
+  })
+
+  const currentSpot = typeof route.query.spot === 'string' ? route.query.spot : undefined
+  const currentPass = typeof route.query.pass === 'string' ? route.query.pass : undefined
+  const currentTicket = typeof route.query.ticket === 'string' ? route.query.ticket : undefined
+  const currentSlot = typeof route.query.slot === 'string' ? route.query.slot : undefined
+
+  if (
+    currentSpot === nextQuery.spot &&
+    currentPass === nextQuery.pass &&
+    currentTicket === nextQuery.ticket &&
+    currentSlot === nextQuery.slot
+  ) {
+    return
+  }
+
+  await router.replace({ query: nextQuery })
+}
+
 const resetSelection = () => {
   const preferredTicket = tickets.value.find((ticket) => ticket.id === requestedTicketId.value)
   const preferredSlot = slots.value.find(
     (slot) => slot.id === requestedSlotId.value && slot.remaining > 0,
   )
-  selectedTicketId.value = preferredTicket?.id ?? tickets.value[0]?.id ?? ''
+  selectedTicketId.value = selectedCityPass.value ? '' : preferredTicket?.id ?? tickets.value[0]?.id ?? ''
   selectedSlotId.value =
     preferredSlot?.id ?? slots.value.find((slot) => slot.remaining > 0)?.id ?? slots.value[0]?.id ?? ''
-  selectedPaymentMethod.value = (selectedTicket.value?.price ?? 0) > 0 ? 'alipay' : 'free'
+  selectedPaymentMethod.value = totalAmount.value > 0 ? 'alipay' : 'free'
   step.value = 1
   submittedOrderId.value = ''
   submittedQrCode.value = ''
 }
 
+const clearLoadedOptions = () => {
+  slots.value = []
+  tickets.value = []
+  selectedTicketId.value = ''
+  selectedSlotId.value = ''
+  selectedPaymentMethod.value = 'free'
+  step.value = 1
+  submittedOrderId.value = ''
+  submittedQrCode.value = ''
+  apiError.value = ''
+}
+
 const resetVisitorForm = () => {
   visitorName.value = ''
   visitorPhone.value = ''
+  visitorEmail.value = ''
   visitorIdNumber.value = ''
   visitorCount.value = 1
 }
@@ -173,7 +241,7 @@ const submitBooking = async () => {
   if (
     !canSubmit.value ||
     !selectedSlot.value ||
-    !selectedTicket.value ||
+    (!selectedTicket.value && !selectedCityPass.value) ||
     selectedSlotRemaining.value < visitorCount.value
   ) {
     return
@@ -188,10 +256,12 @@ const submitBooking = async () => {
     const order = await createBookingOrder({
       scenicSpotId: currentSpot.id,
       slotId: selectedSlot.value.id,
-      ticketName: localizeTicketName(selectedTicket.value),
+      cityPassId: selectedCityPass.value?.id,
+      ticketName: selectedTicket.value?.name,
       paymentMethod: selectedPaymentMethod.value,
       visitorName: visitorName.value.trim(),
       visitorPhone: visitorPhone.value.trim(),
+      visitorEmail: visitorEmail.value.trim() || undefined,
       visitorIdNumber: visitorIdNumber.value.trim(),
       visitorCount: visitorCount.value,
     })
@@ -200,6 +270,17 @@ const submitBooking = async () => {
     submittedQrCode.value = order.qrCodeText
     step.value = 3
     await loadSlots(false)
+    // Replace the URL so the booking query (spot/ticket/slot) is no longer
+    // in history — pressing browser-back from /orders should not drop the
+    // user back into a half-filled form.
+    if (route.query.ticket || route.query.slot) {
+      await router.replace({
+        query: {
+          spot: currentSpot.id,
+          pass: selectedCityPass.value?.id,
+        },
+      })
+    }
   } catch (error) {
     apiError.value = error instanceof Error ? error.message : t('booking.submitError')
   } finally {
@@ -209,18 +290,36 @@ const submitBooking = async () => {
 
 const resolveSpotIdFromList = () => {
   if (scenicSpots.value.length === 0) return ''
+  const requestedPass = cityPasses.value.find((cityPass) => cityPass.id === requestedPassId.value)
+  if (requestedPass) {
+    return requestedPass.primarySpotId
+  }
   const requested = requestedSpotId.value
   if (requested && scenicSpots.value.some((spot) => spot.id === requested)) {
     return requested
   }
-  return scenicSpots.value[0]?.id ?? ''
+  return ''
 }
+
+watch(
+  [requestedPassId, cityPasses],
+  () => {
+    const nextPassId =
+      requestedPassId.value && cityPasses.value.some((cityPass) => cityPass.id === requestedPassId.value)
+        ? requestedPassId.value
+        : ''
+    if (selectedCityPassId.value !== nextPassId) {
+      selectedCityPassId.value = nextPassId
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   [requestedSpotId, scenicSpots],
   () => {
     const nextSpotId = resolveSpotIdFromList()
-    if (nextSpotId && selectedSpotId.value !== nextSpotId) {
+    if (selectedSpotId.value !== nextSpotId) {
       selectedSpotId.value = nextSpotId
     }
   },
@@ -228,12 +327,65 @@ watch(
 )
 
 watch(
-  selectedSpotId,
-  async (value) => {
-    if (!value) return
-    if (route.query.spot !== value) {
-      void router.replace({ query: { spot: value } })
+  selectedCityPassId,
+  async (value, previous) => {
+    const pass = cityPasses.value.find((cityPass) => cityPass.id === value) ?? null
+    if (!pass) {
+      if (previous) {
+        selectedTicketId.value = requestedTicketId.value || tickets.value[0]?.id || ''
+        await syncBookingQuery({ pass: undefined })
+      }
+      return
     }
+
+    selectedTicketId.value = ''
+    selectedSlotId.value = ''
+    step.value = 1
+
+    if (selectedSpotId.value !== pass.primarySpotId) {
+      selectedSpotId.value = pass.primarySpotId
+      return
+    }
+
+    await syncBookingQuery({
+      pass: pass.id,
+      spot: pass.primarySpotId,
+      ticket: undefined,
+      slot: undefined,
+    })
+    await loadSlots()
+  },
+)
+
+watch(
+  selectedSpotId,
+  async (value, previous) => {
+    if (!value) {
+      clearLoadedOptions()
+      if (route.query.spot || route.query.pass || route.query.ticket || route.query.slot) {
+        await syncBookingQuery({
+          spot: undefined,
+          pass: undefined,
+          ticket: undefined,
+          slot: undefined,
+        })
+      }
+      return
+    }
+
+    const spotChanged = Boolean(previous && previous !== value)
+    const passId = selectedCityPassId.value || undefined
+    const isPassModeNow = Boolean(passId)
+    if (route.query.spot !== value || (spotChanged && (route.query.ticket || route.query.slot))) {
+      await syncBookingQuery({
+        spot: value,
+        pass: passId,
+        ticket:
+          isPassModeNow || spotChanged ? undefined : requestedTicketId.value || selectedTicketId.value || undefined,
+        slot: isPassModeNow || spotChanged ? undefined : requestedSlotId.value || undefined,
+      })
+    }
+
     await loadSlots()
   },
   { immediate: true },
@@ -251,13 +403,21 @@ watch(totalAmount, (amount) => {
 })
 
 watch([requestedTicketId, requestedSlotId], () => {
-  if (step.value !== 1) return
+  if (step.value !== 1 || isCityPassMode.value) return
   const preferredTicket = tickets.value.find((ticket) => ticket.id === requestedTicketId.value)
   const preferredSlot = slots.value.find(
     (slot) => slot.id === requestedSlotId.value && slot.remaining > 0,
   )
   if (preferredTicket) selectedTicketId.value = preferredTicket.id
   if (preferredSlot) selectedSlotId.value = preferredSlot.id
+})
+
+// Whenever the booking step changes, snap the booking-flow back to the top
+// so the user always sees the new step from its start (instead of staying
+// stranded near the bottom of the previous step).
+watch(step, async () => {
+  await nextTick()
+  bookingFlowEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 })
 
 onMounted(() => {
@@ -269,6 +429,20 @@ onMounted(() => {
   <div class="page-shell">
     <main id="main-content" class="booking-page" tabindex="-1">
       <section class="booking-hero" aria-labelledby="booking-title" data-reveal>
+        <button type="button" class="booking-hero__back-chip" @click="goBack">
+          <svg class="booking-hero__back-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M10 13 5 8l5-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>{{ t('common.back') }}</span>
+        </button>
+
         <PageCrumbs
           :items="[
             { label: t('page.home'), to: '/' },
@@ -287,7 +461,11 @@ onMounted(() => {
             <p class="booking-hero__eyebrow">{{ t('booking.eyebrow') }}</p>
             <h1 id="booking-title">{{ t('booking.title') }}</h1>
             <p class="booking-hero__description">
-              {{ t('booking.heroDescription', { name: selectedSpot ? localizeSpotName(selectedSpot) : t('booking.heroLoading') }) }}
+              {{
+                selectedSpot
+                  ? t('booking.heroDescription', { name: localizeSpotName(selectedSpot) })
+                  : t('booking.heroUnselected')
+              }}
             </p>
           </div>
           <div class="booking-hero__links">
@@ -304,6 +482,21 @@ onMounted(() => {
         </article>
       </section>
 
+      <section class="booking-rules" :aria-label="t('booking.rules.title')" data-reveal>
+        <header class="booking-rules__head">
+          <p>{{ t('booking.rules.eyebrow') }}</p>
+          <h2>{{ t('booking.rules.title') }}</h2>
+          <span>{{ t('booking.rules.description') }}</span>
+        </header>
+
+        <div class="booking-rules__grid">
+          <article v-for="rule in ticketingRules" :key="rule.id">
+            <small>{{ pickLocalized(rule.title) }}</small>
+            <p>{{ pickLocalized(rule.detail) }}</p>
+          </article>
+        </div>
+      </section>
+
       <section ref="bookingFlowEl" class="booking-flow" :aria-label="t('booking.flowAria')" data-reveal>
         <ol class="booking-steps">
           <li :class="{ 'is-active': step === 1, 'is-done': step > 1 }">{{ t('booking.step1') }}</li>
@@ -312,43 +505,108 @@ onMounted(() => {
         </ol>
 
         <div v-if="step === 1" class="booking-panel">
+          <section class="booking-panel__section" aria-labelledby="pass-select-title">
+            <header>
+              <p>{{ pickLocalized(text('组合产品', 'Bundle Product', 'セット商品', '번들 상품')) }}</p>
+              <h2 id="pass-select-title">{{ pickLocalized(text('先选单景点，或者直接选一张组合票', 'Choose a single attraction or start with a pass', '単独予約かパスから選択', '단일 예약 또는 패스 선택')) }}</h2>
+            </header>
+
+            <div class="booking-pass-grid">
+              <label class="booking-pass-card" :class="{ 'is-selected': !selectedCityPassId }">
+                <input v-model="selectedCityPassId" type="radio" name="city-pass" value="" />
+                <span>
+                  <strong>{{ pickLocalized(text('继续单景点预约', 'Stay with single-attraction booking', '単独予約を続ける', '단일 예약으로 진행')) }}</strong>
+                  <small>{{ pickLocalized(text('保留现在的普通票务流程。', 'Keep the regular ticket flow.', '通常のチケット予約を使います。', '기본 티켓 예약 흐름을 유지합니다.')) }}</small>
+                </span>
+              </label>
+
+              <label
+                v-for="cityPass in cityPasses"
+                :key="cityPass.id"
+                class="booking-pass-card"
+                :class="{ 'is-selected': selectedCityPassId === cityPass.id }"
+              >
+                <input v-model="selectedCityPassId" type="radio" name="city-pass" :value="cityPass.id" />
+                <span>
+                  <strong>{{ pickLocalized(cityPass.name) }}</strong>
+                  <small>{{ pickLocalized(cityPass.description) }}</small>
+                  <small>{{ pickLocalized(cityPass.duration) }} · {{ pickLocalized(cityPass.suitableFor) }}</small>
+                </span>
+                <em>¥{{ cityPass.price }}</em>
+              </label>
+            </div>
+          </section>
+
           <section class="booking-panel__section" aria-labelledby="spot-select-title">
             <header>
               <p>{{ t('booking.section.spot') }}</p>
-              <h2 id="spot-select-title">{{ t('booking.section.spotTitle') }}</h2>
+              <h2 id="spot-select-title">
+                {{
+                  isCityPassMode
+                    ? pickLocalized(text('组合票激活景点', 'Pass activation spot', 'パスの有効化地点', '패스 활성화 지점'))
+                    : t('booking.section.spotTitle')
+                }}
+              </h2>
             </header>
 
             <label class="spot-select">
               <span>{{ t('booking.spot') }}</span>
-              <select v-model="selectedSpotId">
+              <select v-model="selectedSpotId" :disabled="isCityPassMode">
+                <option value="">{{ t('booking.placeholder.spot') }}</option>
                 <option v-for="spot in scenicSpots" :key="spot.id" :value="spot.id">
                   {{ localizeSpotName(spot) }} · {{ localizeSpotArea(spot) }}
                 </option>
               </select>
             </label>
+            <p v-if="selectedCityPass" class="visitor-form__hint">
+              {{ pickLocalized(selectedCityPass.activationNote) }}
+            </p>
           </section>
 
           <section class="booking-panel__section" aria-labelledby="ticket-select-title">
             <header>
-              <p>{{ t('booking.section.ticket') }}</p>
-              <h2 id="ticket-select-title">{{ t('booking.section.ticketTitle') }}</h2>
+              <p>{{ isCityPassMode ? pickLocalized(text('产品内容', 'Product', '商品', '상품')) : t('booking.section.ticket') }}</p>
+              <h2 id="ticket-select-title">
+                {{
+                  isCityPassMode
+                    ? pickLocalized(text('当前组合票将作为本次预约产品', 'This pass will be used for the reservation', 'このパスで予約します', '이 패스로 예약을 진행합니다'))
+                    : t('booking.section.ticketTitle')
+                }}
+              </h2>
             </header>
 
             <div class="booking-options">
+              <p v-if="!hasSelectedSpot" class="visitor-form__hint">
+                {{ t('booking.selectSpotHint') }}
+              </p>
               <label
-                v-for="ticket in tickets"
-                :key="ticket.id"
-                class="booking-option"
-                :class="{ 'is-selected': selectedTicketId === ticket.id }"
+                v-if="selectedCityPass"
+                class="booking-option is-selected"
               >
-                <input v-model="selectedTicketId" type="radio" name="ticket" :value="ticket.id" />
+                <input checked type="radio" name="ticket" disabled />
                 <span>
-                  <strong>{{ localizeTicketName(ticket) }}</strong>
-                  <small>{{ localizeTicketDescription(ticket) }}</small>
-                  <small>{{ localizeTicketAudience(ticket) }}</small>
+                  <strong>{{ pickLocalized(selectedCityPass.name) }}</strong>
+                  <small>{{ pickLocalized(selectedCityPass.description) }}</small>
+                  <small>{{ pickLocalized(selectedCityPass.transportNote) }}</small>
                 </span>
-                <em>{{ ticket.price === 0 ? t('booking.payment.free') : `¥${ticket.price}` }}</em>
+                <em>¥{{ selectedCityPass.price }}</em>
               </label>
+              <template v-else>
+                <label
+                  v-for="ticket in tickets"
+                  :key="ticket.id"
+                  class="booking-option"
+                  :class="{ 'is-selected': selectedTicketId === ticket.id }"
+                >
+                  <input v-model="selectedTicketId" type="radio" name="ticket" :value="ticket.id" />
+                  <span>
+                    <strong>{{ localizeTicketName(ticket) }}</strong>
+                    <small>{{ localizeTicketDescription(ticket) }}</small>
+                    <small>{{ localizeTicketAudience(ticket) }}</small>
+                  </span>
+                  <em>{{ ticket.price === 0 ? t('booking.payment.free') : `¥${ticket.price}` }}</em>
+                </label>
+              </template>
             </div>
           </section>
 
@@ -359,6 +617,12 @@ onMounted(() => {
             </header>
 
             <div class="slot-options">
+              <p v-if="!hasSelectedSpot" class="visitor-form__hint">
+                {{ t('booking.selectSlotHint') }}
+              </p>
+              <p v-else-if="selectedCityPass" class="visitor-form__hint">
+                {{ pickLocalized(text('先预约激活时段，套票内其他权益可按产品说明继续使用。', 'Reserve an activation slot first, then use the rest of the pass according to the product notes.', 'まず有効化枠を予約し、その後は商品説明に沿って他の特典を使います。', '먼저 활성화 시간대를 예약하고, 이후 다른 혜택은 상품 안내에 따라 이용합니다.')) }}
+              </p>
               <label
                 v-for="slot in slots"
                 :key="slot.id"
@@ -380,7 +644,7 @@ onMounted(() => {
                 <small>{{ slot.remaining > 0 ? t('booking.slot.remaining', { count: slot.remaining }) : t('booking.slot.full') }}</small>
               </label>
             </div>
-            <p v-if="slots.length === 0 && !apiError" class="visitor-form__hint visitor-form__hint--warning">
+            <p v-if="hasSelectedSpot && slots.length === 0 && !apiError" class="visitor-form__hint visitor-form__hint--warning">
               {{ t('booking.slotsEmpty') }}
             </p>
             <p v-if="apiError" class="visitor-form__hint visitor-form__hint--warning">{{ apiError }}</p>
@@ -406,6 +670,15 @@ onMounted(() => {
               <label :class="{ 'has-warning': visitorPhone && !phoneIsValid }">
                 <span>{{ t('booking.phone') }}</span>
                 <input v-model="visitorPhone" type="tel" autocomplete="tel" :placeholder="t('booking.placeholder.phone')" />
+              </label>
+              <label :class="{ 'has-warning': visitorEmail && !emailIsValid }">
+                <span>{{ pickLocalized({ 'zh-CN': '联系邮箱', 'en-US': 'Contact email', 'ja-JP': '連絡先メール', 'ko-KR': '연락 이메일' }) }}</span>
+                <input
+                  v-model="visitorEmail"
+                  type="email"
+                  autocomplete="email"
+                  :placeholder="pickLocalized({ 'zh-CN': '选填，用于接收电子凭证', 'en-US': 'Optional, for e-vouchers', 'ja-JP': '任意入力、電子バウチャー用', 'ko-KR': '선택 입력, 전자 바우처용' })"
+                />
               </label>
               <label :class="{ 'has-warning': visitorIdNumber && !idNumberIsValid }">
                 <span>{{ t('booking.idNumber') }}</span>
@@ -453,7 +726,7 @@ onMounted(() => {
               </div>
               <div>
                 <dt>{{ t('booking.summary.ticket') }}</dt>
-                <dd>{{ selectedTicket ? localizeTicketName(selectedTicket) : t('booking.summary.notSelected') }}</dd>
+                <dd>{{ selectedProductName }}</dd>
               </div>
               <div>
                 <dt>{{ t('booking.summary.time') }}</dt>
@@ -556,6 +829,43 @@ onMounted(() => {
   padding-bottom: clamp(46px, 7vw, 90px);
 }
 
+.booking-hero__back-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+  padding: 8px 16px 8px 12px;
+  border: 1px solid rgba(31, 58, 52, 0.18);
+  border-radius: 999px;
+  background: rgba(31, 58, 52, 0.05);
+  color: var(--deep-green);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  transition: background 220ms ease, border-color 220ms ease;
+}
+
+.booking-hero__back-chip:hover,
+.booking-hero__back-chip:focus-visible {
+  background: rgba(31, 58, 52, 0.12);
+  border-color: rgba(31, 58, 52, 0.28);
+  outline: none;
+}
+
+.booking-hero__back-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform 220ms ease;
+}
+
+.booking-hero__back-chip:hover .booking-hero__back-icon,
+.booking-hero__back-chip:focus-visible .booking-hero__back-icon {
+  transform: translateX(-2px);
+}
+
 .booking-hero__meta {
   display: flex;
   justify-content: space-between;
@@ -619,6 +929,7 @@ onMounted(() => {
 }
 
 .booking-notes,
+.booking-rules,
 .booking-flow {
   max-width: 1320px;
   margin: 0 auto;
@@ -652,6 +963,65 @@ onMounted(() => {
   color: rgba(16, 20, 18, 0.62);
   font-size: 14px;
   line-height: 1.8;
+}
+
+.booking-rules {
+  display: grid;
+  gap: clamp(22px, 3vw, 34px);
+  margin-bottom: clamp(38px, 5vw, 64px);
+}
+
+.booking-rules__head {
+  display: grid;
+  grid-template-columns: minmax(0, 0.28fr) minmax(0, 0.48fr) minmax(0, 0.52fr);
+  gap: clamp(18px, 3vw, 38px);
+  align-items: end;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(16, 20, 18, 0.1);
+}
+
+.booking-rules__head p,
+.booking-rules__grid small {
+  color: rgba(16, 20, 18, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.booking-rules__head h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 3vw, 42px);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+}
+
+.booking-rules__head span {
+  color: rgba(16, 20, 18, 0.58);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.booking-rules__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid rgba(16, 20, 18, 0.08);
+  background: rgba(16, 20, 18, 0.08);
+}
+
+.booking-rules__grid article {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 178px;
+  padding: 18px;
+  background: rgba(250, 247, 240, 0.94);
+}
+
+.booking-rules__grid p {
+  color: rgba(16, 20, 18, 0.62);
+  font-size: 13px;
+  line-height: 1.75;
 }
 
 .booking-flow {
@@ -970,7 +1340,12 @@ onMounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .booking-rules__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .booking-hero__layout,
+  .booking-rules__head,
   .booking-steps,
   .slot-options,
   .visitor-form {
@@ -985,11 +1360,13 @@ onMounted(() => {
 @media (max-width: 640px) {
   .booking-hero,
   .booking-notes,
+  .booking-rules,
   .booking-flow {
     padding-inline: 18px;
   }
 
   .booking-notes,
+  .booking-rules__grid,
   .booking-option,
   .slot-option,
   .payment-option,

@@ -1,6 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import SiteFooter from '../components/layout/SiteFooter.vue'
 import { t } from '../i18n/site'
+
+const router = useRouter()
+// Show "back" only if there is somewhere to go back to. window.history.length
+// is 1 when the user landed on this URL directly (e.g. from a bookmark or
+// pasted link), in which case the button would otherwise dump them on a blank
+// browser tab.
+const canGoBack = computed(() =>
+  typeof window !== 'undefined' && window.history.length > 1,
+)
+const goBack = () => router.back()
 </script>
 
 <template>
@@ -12,7 +24,20 @@ import { t } from '../i18n/site'
         <p class="not-found-page__description">{{ t('notfound.description') }}</p>
 
         <div class="not-found-page__actions">
-          <RouterLink to="/" class="not-found-page__primary">{{ t('notfound.home') }}</RouterLink>
+          <button
+            v-if="canGoBack"
+            type="button"
+            class="not-found-page__primary"
+            @click="goBack"
+          >
+            {{ t('common.back') }}
+          </button>
+          <RouterLink
+            to="/"
+            :class="canGoBack ? 'not-found-page__secondary' : 'not-found-page__primary'"
+          >
+            {{ t('notfound.home') }}
+          </RouterLink>
           <RouterLink to="/scenic-spots" class="not-found-page__secondary">
             {{ t('notfound.reservations') }}
           </RouterLink>
@@ -76,9 +101,12 @@ import { t } from '../i18n/site'
   min-height: 42px;
   padding: 0 18px;
   border: 1px solid rgba(16, 20, 18, 0.12);
+  background: transparent;
+  font-family: inherit;
   font-size: 11px;
   letter-spacing: 0.24em;
   text-transform: uppercase;
+  cursor: pointer;
 }
 
 .not-found-page__primary {
@@ -88,5 +116,13 @@ import { t } from '../i18n/site'
 
 .not-found-page__secondary {
   color: rgba(16, 20, 18, 0.62);
+}
+
+.not-found-page__primary:hover,
+.not-found-page__primary:focus-visible,
+.not-found-page__secondary:hover,
+.not-found-page__secondary:focus-visible {
+  border-color: rgba(31, 58, 52, 0.32);
+  outline: none;
 }
 </style>

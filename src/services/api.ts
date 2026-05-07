@@ -3,6 +3,7 @@ import type {
   BookingOrderStatus,
   BookingPaymentMethod,
 } from '../data/mockOrders'
+import type { LocalizedText } from '../i18n/site'
 
 export type ApiScenicSpot = {
   id: string
@@ -26,6 +27,26 @@ export type ApiTicketType = {
   price: number
   description: string
   availableFor: string
+}
+
+export type ApiCityPass = {
+  id: string
+  name: LocalizedText
+  shortLabel: LocalizedText
+  description: LocalizedText
+  duration: LocalizedText
+  suitableFor: LocalizedText
+  transportNote: LocalizedText
+  activationNote: LocalizedText
+  routeNote: LocalizedText
+  price: number
+  marketPrice: number
+  primarySpotId: string
+  coverSpotId: string
+  suggestedRouteId?: string
+  includedSpotIds: string[]
+  includedBenefits: LocalizedText[]
+  serviceHighlights: LocalizedText[]
 }
 
 export type ApiBookingSlot = {
@@ -76,6 +97,44 @@ export type ApiHangzhouWeather = {
   }>
 }
 
+export type ApiOperationTone = 'normal' | 'watch' | 'limited' | 'closed'
+
+export type ApiOperationNotice = {
+  id: string
+  spotId?: string
+  tone: ApiOperationTone
+  tag: LocalizedText
+  title: LocalizedText
+  detail: LocalizedText
+}
+
+export type ApiSpotOperationStatus = {
+  spotId: string
+  openTone: ApiOperationTone
+  openLabel: LocalizedText
+  openDetail: LocalizedText
+  crowdTone: ApiOperationTone
+  crowdLabel: LocalizedText
+  crowdDetail: LocalizedText
+  highlight: LocalizedText
+  alerts: ApiOperationNotice[]
+}
+
+export type ApiOperationServiceCard = {
+  id: string
+  label: LocalizedText
+  value: string
+  detail: LocalizedText
+  href?: string
+}
+
+export type ApiOperationsPayload = {
+  syncedAt: string
+  spotStatuses: Record<string, ApiSpotOperationStatus>
+  featuredAlerts: ApiOperationNotice[]
+  serviceCards: ApiOperationServiceCard[]
+}
+
 export type ScenicSpotInput = Omit<ApiScenicSpot, 'id'> & { id?: string }
 export type TicketTypeInput = Omit<ApiTicketType, 'id'> & { id?: string }
 export type BookingSlotInput = {
@@ -90,23 +149,31 @@ export type BookingSlotInput = {
 export type CreateBookingPayload = {
   scenicSpotId: string
   slotId: string
-  ticketName: string
+  ticketName?: string
+  cityPassId?: string
   paymentMethod: BookingPaymentMethod
   visitorName: string
   visitorPhone: string
+  visitorEmail?: string
   visitorIdNumber: string
   visitorCount: number
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? ''
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const headers = new Headers(init?.headers)
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (ADMIN_TOKEN && !headers.has('x-admin-token')) {
+    headers.set('x-admin-token', ADMIN_TOKEN)
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
     ...init,
+    headers,
   })
 
   if (!response.ok) {
@@ -143,6 +210,8 @@ export const fetchTicketTypes = (scenicSpotId?: string) => {
   return request<ApiTicketType[]>(`/ticket-types${query}`)
 }
 
+export const fetchCityPasses = () => request<ApiCityPass[]>('/city-passes')
+
 export const createTicketType = (input: TicketTypeInput) =>
   request<ApiTicketType>('/ticket-types', { method: 'POST', body: JSON.stringify(input) })
 
@@ -161,6 +230,8 @@ export const fetchBookingSlots = (scenicSpotId?: string) => {
 }
 
 export const fetchHangzhouWeather = () => request<ApiHangzhouWeather>('/weather/hangzhou')
+
+export const fetchOperations = () => request<ApiOperationsPayload>('/operations/hangzhou')
 
 export const createBookingSlot = (input: BookingSlotInput) =>
   request<ApiBookingSlot>('/booking-slots', { method: 'POST', body: JSON.stringify(input) })
@@ -182,10 +253,10 @@ export const fetchOrders = () => request<BookingOrder[]>('/orders')
 export const createBookingOrder = (payload: CreateBookingPayload) =>
   request<BookingOrder>('/orders', { method: 'POST', body: JSON.stringify(payload) })
 
-export const updateOrderStatus = (id: string, status: BookingOrderStatus) =>
+export const updateOrderStatus = (id: string, status: BookingOrderStatus, cancellationReason?: string) =>
   request<BookingOrder>(`/orders/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, cancellationReason }),
   })
 
 export const deleteOrder = (id: string) =>

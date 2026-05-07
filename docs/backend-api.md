@@ -20,6 +20,12 @@ npm run dev:full
 npm run dev:api
 ```
 
+可选安全配置：
+
+- `ADMIN_TOKEN`：设置后，景点、票种、时段、硬删除、重置等后台写接口必须携带 `x-admin-token`；用户取消订单仍可走公开取消流程。
+- `CORS_ORIGINS`：逗号分隔的允许来源，例如 `https://travel.example.gov.cn,https://admin.example.gov.cn`。未设置时保持本地开发友好。
+- `VITE_ADMIN_TOKEN`：本地管理端调试时可配置同一个值，前端请求会自动带上 `x-admin-token`。
+
 ## 数据表
 
 - `scenic_spots`：景点主数据。
@@ -38,6 +44,8 @@ npm run dev:api
 ### 基础
 
 - `GET /api/health`：健康检查。
+- `GET /api/weather/hangzhou`：杭州天气缓存接口。
+- `GET /api/operations/hangzhou`：后端聚合的实时运行状态、客流、临时管制、演出/游船、节假日与天气提醒。
 
 ### 景点 `scenic_spots`
 

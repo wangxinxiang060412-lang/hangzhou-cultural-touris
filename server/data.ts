@@ -1,4 +1,5 @@
 import { bookingSlots } from '../src/data/bookingSlots'
+import { cityPasses } from '../src/data/cityPasses'
 import { mockOrders } from '../src/data/mockOrders'
 import { scenicSpotsSeed } from '../src/data/scenicSpots'
 import { ticketTypes } from '../src/data/ticketTypes'
@@ -6,6 +7,7 @@ import { ticketTypes } from '../src/data/ticketTypes'
 export const seedScenicSpots = scenicSpotsSeed
 export const seedTicketTypes = ticketTypes
 export const seedBookingSlots = bookingSlots
+export const seedCityPasses = cityPasses
 export const seedOrders = mockOrders.map((order) => ({
   ...order,
   scenicSpotId:
