@@ -2,6 +2,9 @@ import cors from 'cors'
 import { randomUUID } from 'node:crypto'
 import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { db, initializeDatabase, mapOrderRow } from './db'
 import type { OrderRow, OrderStatus, SlotRow, TravelerProfileRow } from './db'
@@ -20,6 +23,10 @@ import { buildOperationsPayload } from './operations'
 const app = express()
 const port = Number(process.env.PORT ?? 4174)
 const adminToken = process.env.ADMIN_TOKEN ?? ''
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const distPath = path.resolve(__dirname, '../dist')
+const indexHtmlPath = path.join(distPath, 'index.html')
+const hasBuiltFrontend = fs.existsSync(indexHtmlPath)
 const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
   .split(',')
   .map((origin) => origin.trim())
@@ -701,6 +708,14 @@ app.post('/api/admin/reset-database', requireAdminAuth, (_request, response) => 
 app.use('/api', (_request, response) => {
   response.status(404).json({ message: 'API endpoint not found' })
 })
+
+if (hasBuiltFrontend) {
+  app.use(express.static(distPath, { index: false, maxAge: '1h' }))
+
+  app.get(/^(?!\/api(?:\/|$)).*/, (_request, response) => {
+    response.sendFile(indexHtmlPath)
+  })
+}
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   const message = error instanceof Error ? error.message : '服务器内部错误'
