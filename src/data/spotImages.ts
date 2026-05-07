@@ -15,7 +15,7 @@ const registry: Record<string, SpotImageEntry> = Object.fromEntries(
 
 const positionRegistry: Record<string, SpotImageEntry['position']> = {
   'west-lake': {
-    list: '56% 52%',
+    list: '50% 68%',
     featured: '58% 52%',
     detail: '58% 50%',
   },
