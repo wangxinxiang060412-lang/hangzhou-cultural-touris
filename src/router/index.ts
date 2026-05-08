@@ -1,5 +1,5 @@
 import { watch } from 'vue'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteLocationNormalized, RouterScrollBehavior } from 'vue-router'
 
 import Home from '../pages/Home.vue'
@@ -61,7 +61,7 @@ const scrollBehavior: RouterScrollBehavior = async (to, from, savedPosition) => 
 }
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   scrollBehavior,
   routes: [
     { path: '/', name: 'home', component: Home, meta: { titleKey: 'page.home' } },

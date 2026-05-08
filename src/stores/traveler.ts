@@ -1,8 +1,8 @@
 import { computed, ref, watch } from 'vue'
-import { fetchTravelerProfile, saveTravelerProfile } from '../services/api'
 import type { ApiTravelerProfile, ApiTravelerSpotState, ApiTravelerTripItem } from '../services/api'
 
 const STORAGE_KEY = 'hangzhou-traveler-profile-id'
+const PROFILE_STORAGE_KEY = 'hangzhou-traveler-profile-data'
 
 const createTravelerId = () =>
   `traveler-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`
@@ -31,64 +31,53 @@ const readStoredProfileId = () => {
   return next
 }
 
-export const travelerProfile = ref<ApiTravelerProfile>(defaultProfile(readStoredProfileId()))
+const loadProfileFromStorage = (): ApiTravelerProfile => {
+  const id = readStoredProfileId()
+  if (typeof window === 'undefined') return defaultProfile(id)
+  try {
+    const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as ApiTravelerProfile
+      if (parsed.id) return parsed
+    }
+  } catch { /* ignore */ }
+  return defaultProfile(id)
+}
+
+const saveProfileToStorage = (profile: ApiTravelerProfile) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(STORAGE_KEY, profile.id)
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile))
+  } catch { /* ignore */ }
+}
+
+export const travelerProfile = ref<ApiTravelerProfile>(loadProfileFromStorage())
 export const travelerProfileLoading = ref(false)
 export const travelerProfileError = ref('')
-export const travelerProfileSyncState = ref<'idle' | 'syncing' | 'synced' | 'error'>('idle')
-
-let loadPromise: Promise<ApiTravelerProfile> | null = null
-let writeTimer = 0
+export const travelerProfileSyncState = ref<'idle' | 'syncing' | 'synced' | 'error'>('synced')
 
 const setProfile = (next: ApiTravelerProfile) => {
   travelerProfile.value = next
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, next.id)
-  }
+  saveProfileToStorage(next)
 }
 
 export const ensureTravelerProfile = async () => {
-  if (loadPromise) return loadPromise
-
-  travelerProfileLoading.value = true
-  travelerProfileError.value = ''
-  loadPromise = fetchTravelerProfile(travelerProfile.value.id)
-    .then((remote) => {
-      setProfile(remote)
-      travelerProfileSyncState.value = 'synced'
-      return remote
-    })
-    .catch(() => {
-      travelerProfileSyncState.value = 'idle'
-      return travelerProfile.value
-    })
-    .finally(() => {
-      travelerProfileLoading.value = false
-      loadPromise = null
-    })
-
-  return loadPromise
+  // 纯前端模式：直接从 localStorage 加载，无需服务端同步
+  travelerProfileSyncState.value = 'synced'
+  return travelerProfile.value
 }
 
 export const syncTravelerProfile = async () => {
-  try {
-    travelerProfileSyncState.value = 'syncing'
-    const saved = await saveTravelerProfile(travelerProfile.value.id, travelerProfile.value)
-    setProfile(saved)
-    travelerProfileSyncState.value = 'synced'
-    return saved
-  } catch (error) {
-    travelerProfileError.value = error instanceof Error ? error.message : '旅行档案同步失败'
-    travelerProfileSyncState.value = 'error'
-    throw error
-  }
+  // 纯前端模式：保存到 localStorage
+  saveProfileToStorage(travelerProfile.value)
+  travelerProfileSyncState.value = 'synced'
+  return travelerProfile.value
 }
 
 const scheduleSync = () => {
-  if (typeof window === 'undefined') return
-  window.clearTimeout(writeTimer)
-  writeTimer = window.setTimeout(() => {
-    void syncTravelerProfile()
-  }, 500)
+  // 纯前端模式：直接保存到 localStorage，不需要延迟
+  saveProfileToStorage(travelerProfile.value)
 }
 
 const updateSpotState = (
@@ -121,10 +110,11 @@ export const renameTravelerProfile = (displayName: string) => {
 }
 
 export const loadTravelerProfileById = async (id: string) => {
-  const remote = await fetchTravelerProfile(id)
-  setProfile(remote)
+  // 纯前端模式：创建新的默认 profile
+  const profile = defaultProfile(id)
+  setProfile(profile)
   travelerProfileSyncState.value = 'synced'
-  return remote
+  return profile
 }
 
 export const markSpotViewed = (scenicSpotId: string) => {
