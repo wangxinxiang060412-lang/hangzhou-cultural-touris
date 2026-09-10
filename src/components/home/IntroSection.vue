@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { visitGuideFacts } from '../../data/visitGuide'
+import { visitGuideFacts } from '../../content/visitGuide'
 import { pickLocalized, t } from '../../i18n/site'
 import SectionLabel from '../common/SectionLabel.vue'
 </script>

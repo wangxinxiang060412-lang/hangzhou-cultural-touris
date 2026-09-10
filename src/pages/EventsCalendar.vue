@@ -3,10 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import ArchiveHeader from '../components/common/ArchiveHeader.vue'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
-import { getSpotImage, getSpotImagePosition } from '../data/spotImages'
 import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, t } from '../i18n/site'
+import { ensureCatalog, scenicSpots } from '../stores/catalog'
 import { ensureDiscovery, cityEvents } from '../stores/discovery'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../utils/scenicSpotImages'
 
 const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
   'zh-CN': zh,
@@ -26,11 +27,14 @@ const filters = [
 const activeFilter = ref<(typeof filters)[number]['id']>('all')
 
 const events = computed(() =>
-  cityEvents.value.map((item) => ({
-    ...item,
-    image: getSpotImage(item.leadSpotId),
-    imagePosition: getSpotImagePosition(item.leadSpotId, 'featured'),
-  })),
+  cityEvents.value.map((item) => {
+    const leadSpot = scenicSpots.value.find((spot) => spot.id === item.leadSpotId)
+    return {
+      ...item,
+      image: getScenicSpotImage(leadSpot),
+      imagePosition: getScenicSpotImagePosition(leadSpot, 'featured'),
+    }
+  }),
 )
 
 const filteredEvents = computed(() => {
@@ -47,6 +51,7 @@ const filteredEvents = computed(() => {
 })
 
 onMounted(() => {
+  void ensureCatalog()
   void ensureDiscovery()
 })
 </script>

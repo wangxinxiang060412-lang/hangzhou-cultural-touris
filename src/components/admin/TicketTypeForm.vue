@@ -7,6 +7,7 @@ const props = defineProps<{
   value?: ApiTicketType | null
   spots: ApiScenicSpot[]
   defaultSpotId?: string
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -48,7 +49,7 @@ const isValid = computed(
 )
 
 const handleSubmit = () => {
-  if (!isValid.value) return
+  if (props.submitting || !isValid.value) return
 
   emit('submit', {
     scenicSpotId: state.scenicSpotId,
@@ -93,9 +94,9 @@ const handleSubmit = () => {
     </div>
 
     <div class="entity-form__actions">
-      <button type="button" class="entity-form__cancel" @click="emit('cancel')">取消</button>
-      <button type="submit" class="entity-form__submit" :disabled="!isValid">
-        {{ mode === 'create' ? '创建票种' : '保存修改' }}
+      <button type="button" class="entity-form__cancel" :disabled="submitting" @click="emit('cancel')">取消</button>
+      <button type="submit" class="entity-form__submit" :disabled="!isValid || submitting">
+        {{ submitting ? '保存中' : mode === 'create' ? '创建票种' : '保存修改' }}
       </button>
     </div>
   </form>

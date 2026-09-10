@@ -4,11 +4,11 @@ import { useRoute } from 'vue-router'
 import ArchiveHeader from '../components/common/ArchiveHeader.vue'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
-import { getSpotImage, getSpotImagePosition } from '../data/spotImages'
 import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, t } from '../i18n/site'
 import { catalogError, cityPasses, ensureCatalog, findScenicSpot, scenicSpots } from '../stores/catalog'
 import { ensureOperationsFeed, getSpotOperationStatus, type OperationTone } from '../stores/operations'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../utils/scenicSpotImages'
 import {
   localizeSpotArea,
   localizeSpotCategory,
@@ -68,13 +68,16 @@ const filteredSpots = computed(() => {
 })
 
 const featuredPasses = computed(() =>
-  cityPasses.value.slice(0, 3).map((pass) => ({
-    ...pass,
-    coverSpot: findScenicSpot(pass.coverSpotId),
-    image: getSpotImage(pass.coverSpotId),
-    imagePosition: getSpotImagePosition(pass.coverSpotId, 'featured'),
-    savings: Math.max(pass.marketPrice - pass.price, 0),
-  })),
+  cityPasses.value.slice(0, 3).map((pass) => {
+    const coverSpot = findScenicSpot(pass.coverSpotId)
+    return {
+      ...pass,
+      coverSpot,
+      image: getScenicSpotImage(coverSpot),
+      imagePosition: getScenicSpotImagePosition(coverSpot, 'featured'),
+      savings: Math.max(pass.marketPrice - pass.price, 0),
+    }
+  }),
 )
 
 const resetFilters = () => {
@@ -244,10 +247,10 @@ watch(
 
             <figure class="scenic-card__media">
               <img
-                v-if="getSpotImage(spot.id)"
-                :src="getSpotImage(spot.id) ?? ''"
+                v-if="getScenicSpotImage(spot)"
+                :src="getScenicSpotImage(spot) ?? ''"
                 :alt="localizeSpotName(spot)"
-                :style="{ objectPosition: getSpotImagePosition(spot.id, 'list') }"
+                :style="{ objectPosition: getScenicSpotImagePosition(spot, 'list') }"
                 loading="lazy"
                 decoding="async"
               />

@@ -1,19 +1,30 @@
 import { computed, ref } from 'vue'
 import {
   fetchBookingSlots,
+  fetchAuditLogs,
   fetchCityPasses,
   fetchOrders,
   fetchScenicSpots,
   fetchTicketTypes,
+  fetchUserAccounts,
 } from '../services/api'
-import type { ApiBookingSlot, ApiCityPass, ApiScenicSpot, ApiTicketType } from '../services/api'
-import type { BookingOrder } from '../data/mockOrders'
+import type {
+  ApiAuditLog,
+  ApiBookingSlot,
+  ApiCityPass,
+  ApiScenicSpot,
+  ApiTicketType,
+  ApiUserAccount,
+} from '../services/api'
+import type { BookingOrder } from '../types/booking'
 
 export const scenicSpots = ref<ApiScenicSpot[]>([])
 export const ticketTypes = ref<ApiTicketType[]>([])
 export const bookingSlots = ref<ApiBookingSlot[]>([])
 export const cityPasses = ref<ApiCityPass[]>([])
 export const orders = ref<BookingOrder[]>([])
+export const userAccounts = ref<ApiUserAccount[]>([])
+export const auditLogs = ref<ApiAuditLog[]>([])
 export const catalogError = ref('')
 export const catalogLoaded = ref(false)
 
@@ -55,6 +66,16 @@ export const refreshOrders = () =>
     orders.value = value
   })
 
+export const refreshUserAccounts = () =>
+  runPromise(fetchUserAccounts(), (value) => {
+    userAccounts.value = value
+  })
+
+export const refreshAuditLogs = () =>
+  runPromise(fetchAuditLogs(), (value) => {
+    auditLogs.value = value
+  })
+
 export const refreshCatalog = async () => {
   catalogError.value = ''
   await Promise.all([
@@ -74,6 +95,8 @@ export const refreshAll = async () => {
     refreshBookingSlots(),
     refreshCityPasses(),
     refreshOrders(),
+    refreshUserAccounts(),
+    refreshAuditLogs(),
   ])
   catalogLoaded.value = true
 }

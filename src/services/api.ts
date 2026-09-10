@@ -1,10 +1,44 @@
+import { cityPasses as contentCityPasses } from '../content/cityPasses'
+import { cityEvents as contentCityEvents } from '../content/eventsCalendar'
+import { neighborhoods as contentNeighborhoods } from '../content/neighborhoods'
+import { staticWeather } from '../content/staticWeather'
+import type { ThemeJourneyFilter } from '../content/themeJourneys'
+import { themeJourneys as contentThemeJourneys } from '../content/themeJourneys'
+import type { LocalizedText } from '../i18n/site'
 import type {
   BookingOrder,
   BookingOrderStatus,
   BookingPaymentMethod,
-} from '../data/mockOrders'
-import type { ThemeJourneyFilter } from '../data/themeJourneys'
-import type { LocalizedText } from '../i18n/site'
+} from '../types/booking'
+import type { AuditLog, AuthUser, LoginCredentials, RegisterPayload, UserAccount, UserRole, UserStatus } from '../types/security'
+import { buildOperationsPayload } from '../utils/operations'
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api').replace(/\/$/, '')
+
+let authToken = ''
+export const setAuthToken = (token: string) => { authToken = token }
+export const getAuthToken = () => authToken
+
+const remoteJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+  })
+  const payload = (await response.json().catch(() => ({}))) as { error?: string }
+  if (!response.ok) {
+    throw new Error(payload.error || `请求失败：${response.status}`)
+  }
+  return payload as T
+}
+
+const jsonBody = (method: 'POST' | 'PUT' | 'PATCH', body: unknown): RequestInit => ({
+  method,
+  body: JSON.stringify(body),
+})
 
 export type ApiScenicSpot = {
   id: string
@@ -19,6 +53,8 @@ export type ApiScenicSpot = {
   reservationRequired: boolean
   paid: boolean
   featured: boolean
+  imageUrl: string
+  imagePosition: string
 }
 
 export type ApiTicketType = {
@@ -65,7 +101,7 @@ export type ApiBookingSlot = {
 export type ApiHangzhouWeather = {
   location: string
   latitude: number
-  longitude: number
+  longitude: string | number
   timezone: string
   source: string
   sourceUrl: string
@@ -219,6 +255,11 @@ export type ApiThemeJourney = {
   }>
 }
 
+export type ApiUserRole = UserRole
+export type ApiUserStatus = UserStatus
+export type ApiUserAccount = UserAccount
+export type ApiAuditLog = AuditLog
+
 export type ScenicSpotInput = Omit<ApiScenicSpot, 'id'> & { id?: string }
 export type TicketTypeInput = Omit<ApiTicketType, 'id'> & { id?: string }
 export type BookingSlotInput = {
@@ -228,6 +269,17 @@ export type BookingSlotInput = {
   timeRange: string
   capacity: number
   booked?: number
+}
+
+export type UserAccountInput = {
+  id?: string
+  username: string
+  displayName: string
+  role: ApiUserRole
+  status: ApiUserStatus
+  phoneMasked: string
+  avatarColor?: string
+  password?: string
 }
 
 export type CreateBookingPayload = {
@@ -243,154 +295,120 @@ export type CreateBookingPayload = {
   visitorCount: number
 }
 
-/* ------------------------------------------------------------------ */
-/*  静态数据导入                                                        */
-/* ------------------------------------------------------------------ */
+export const fetchScenicSpots = () => remoteJson<ApiScenicSpot[]>('/scenic-spots')
 
-import { scenicSpotsSeed } from '../data/scenicSpots'
-import { ticketTypes as seedTicketTypes } from '../data/ticketTypes'
-import { bookingSlots as seedBookingSlots } from '../data/bookingSlots'
-import { cityPasses as seedCityPasses } from '../data/cityPasses'
-import { neighborhoods as seedNeighborhoods } from '../data/neighborhoods'
-import { cityEvents as seedCityEvents } from '../data/eventsCalendar'
-import { themeJourneys as seedThemeJourneys } from '../data/themeJourneys'
-import { mockOrders } from '../data/mockOrders'
-import { staticWeather } from '../data/staticWeather'
-import { buildOperationsPayload } from '../utils/operations'
-
-/* ------------------------------------------------------------------ */
-/*  内存数据存储（模拟后端状态）                                          */
-/* ------------------------------------------------------------------ */
-
-const ORDERS_STORAGE_KEY = 'hangzhou-static-orders'
-
-const loadOrdersFromStorage = (): BookingOrder[] => {
-  if (typeof window === 'undefined') return [...mockOrders]
-  try {
-    const raw = window.localStorage.getItem(ORDERS_STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as BookingOrder[]
-  } catch { /* ignore */ }
-  return [...mockOrders]
-}
-
-const saveOrdersToStorage = (orders: BookingOrder[]) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders))
-  } catch { /* ignore */ }
-}
-
-let inMemoryOrders: BookingOrder[] = loadOrdersFromStorage()
-
-/* ------------------------------------------------------------------ */
-/*  将种子数据转换为 API 类型                                            */
-/* ------------------------------------------------------------------ */
-
-const toApiScenicSpot = (seed: (typeof scenicSpotsSeed)[number]): ApiScenicSpot => ({
-  id: seed.id,
-  nameZh: seed.nameZh,
-  nameEn: seed.nameEn,
-  area: seed.area,
-  category: seed.category,
-  description: seed.description,
-  address: seed.address,
-  openingHours: seed.openingHours,
-  tags: seed.tags,
-  reservationRequired: seed.reservationRequired,
-  paid: seed.paid,
-  featured: seed.featured,
-})
-
-const spotNameMap = Object.fromEntries(
-  scenicSpotsSeed.map((spot) => [spot.id, spot.nameZh]),
-)
-
-const toApiBookingSlot = (seed: (typeof seedBookingSlots)[number]): ApiBookingSlot => ({
-  id: seed.id,
-  scenicSpotId: seed.scenicSpotId,
-  date: seed.date,
-  timeRange: seed.timeRange,
-  capacity: seed.capacity,
-  booked: seed.booked,
-  spotName: spotNameMap[seed.scenicSpotId] ?? '',
-  localBooked: 0,
-  remaining: Math.max(seed.capacity - seed.booked, 0),
-})
-
-/* ------------------------------------------------------------------ */
-/*  静态 API 函数 — 保持原有签名不变                                      */
-/* ------------------------------------------------------------------ */
-
-const delay = <T>(value: T): Promise<T> => Promise.resolve(value)
-
-export const fetchScenicSpots = () =>
-  delay(scenicSpotsSeed.map(toApiScenicSpot))
-
-export const fetchScenicSpot = (id: string) => {
-  const spot = scenicSpotsSeed.find((s) => s.id === id)
-  if (!spot) return Promise.reject(new Error('景点不存在'))
-  return delay(toApiScenicSpot(spot))
-}
+export const fetchScenicSpot = (id: string) =>
+  remoteJson<ApiScenicSpot>(`/scenic-spots/${encodeURIComponent(id)}`)
 
 export const createScenicSpot = (input: ScenicSpotInput) =>
-  delay({ ...input, id: input.id ?? `spot-${Date.now()}` } as ApiScenicSpot)
+  remoteJson<ApiScenicSpot>('/scenic-spots', jsonBody('POST', input))
 
-export const updateScenicSpot = (id: string, input: Partial<Omit<ScenicSpotInput, 'id'>>) => {
-  const spot = scenicSpotsSeed.find((s) => s.id === id)
-  if (!spot) return Promise.reject(new Error('景点不存在'))
-  return delay({ ...toApiScenicSpot(spot), ...input } as ApiScenicSpot)
-}
+export const updateScenicSpot = (id: string, input: Partial<Omit<ScenicSpotInput, 'id'>>) =>
+  remoteJson<ApiScenicSpot>(`/scenic-spots/${encodeURIComponent(id)}`, jsonBody('PUT', input))
 
-export const deleteScenicSpot = (_id: string) => delay({ ok: true as const })
+export const deleteScenicSpot = (id: string) =>
+  remoteJson<{ ok: true }>(`/scenic-spots/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+export const uploadScenicSpotImage = (input: {
+  fileName: string
+  mimeType: string
+  dataBase64: string
+}) => remoteJson<{ imageUrl: string }>('/uploads/scenic-spot-image', jsonBody('POST', input))
 
 export const fetchTicketTypes = (scenicSpotId?: string) => {
-  const filtered = scenicSpotId
-    ? seedTicketTypes.filter((t) => t.scenicSpotId === scenicSpotId)
-    : seedTicketTypes
-  return delay(filtered as ApiTicketType[])
+  const query = scenicSpotId ? `?scenicSpotId=${encodeURIComponent(scenicSpotId)}` : ''
+  return remoteJson<ApiTicketType[]>(`/ticket-types${query}`)
 }
-
-export const fetchCityPasses = () => delay(seedCityPasses as ApiCityPass[])
-export const fetchNeighborhoods = () => delay(seedNeighborhoods as ApiNeighborhood[])
-export const fetchCityEvents = () => delay(seedCityEvents as ApiCityEvent[])
-export const fetchThemeJourneys = () => delay(seedThemeJourneys as ApiThemeJourney[])
 
 export const createTicketType = (input: TicketTypeInput) =>
-  delay({ ...input, id: input.id ?? `ticket-${Date.now()}` } as ApiTicketType)
+  remoteJson<ApiTicketType>('/ticket-types', jsonBody('POST', input))
 
-export const updateTicketType = (id: string, input: Partial<Omit<TicketTypeInput, 'id'>>) => {
-  const ticket = seedTicketTypes.find((t) => t.id === id)
-  if (!ticket) return Promise.reject(new Error('票种不存在'))
-  return delay({ ...ticket, ...input } as ApiTicketType)
-}
+export const updateTicketType = (id: string, input: Partial<Omit<TicketTypeInput, 'id'>>) =>
+  remoteJson<ApiTicketType>(`/ticket-types/${encodeURIComponent(id)}`, jsonBody('PUT', input))
 
-export const deleteTicketType = (_id: string) => delay({ ok: true as const })
+export const deleteTicketType = (id: string) =>
+  remoteJson<{ ok: true }>(`/ticket-types/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 export const fetchBookingSlots = (scenicSpotId?: string) => {
-  const all = seedBookingSlots.map(toApiBookingSlot)
-  const filtered = scenicSpotId ? all.filter((s) => s.scenicSpotId === scenicSpotId) : all
-  return delay(filtered)
+  const query = scenicSpotId ? `?scenicSpotId=${encodeURIComponent(scenicSpotId)}` : ''
+  return remoteJson<ApiBookingSlot[]>(`/booking-slots${query}`)
 }
 
-export const fetchHangzhouWeather = () =>
-  delay({ ...staticWeather, syncedAt: new Date().toISOString() })
+export const createBookingSlot = (input: BookingSlotInput) =>
+  remoteJson<ApiBookingSlot>('/booking-slots', jsonBody('POST', input))
 
-export const fetchOperations = () => {
-  const spots = scenicSpotsSeed.map((s) => ({
-    id: s.id,
-    nameZh: s.nameZh,
-    nameEn: s.nameEn,
-    featured: s.featured,
-  }))
-  const slots = seedBookingSlots.map((s) => ({
-    scenicSpotId: s.scenicSpotId,
-    date: s.date,
-    timeRange: s.timeRange,
-    capacity: s.capacity,
-    remaining: Math.max(s.capacity - s.booked, 0),
-  }))
-  const payload = buildOperationsPayload(spots, slots, staticWeather)
-  return delay(payload as ApiOperationsPayload)
+export const updateBookingSlot = (
+  id: string,
+  input: Partial<Pick<BookingSlotInput, 'date' | 'timeRange' | 'capacity' | 'booked'>>,
+) => remoteJson<ApiBookingSlot>(`/booking-slots/${encodeURIComponent(id)}`, jsonBody('PUT', input))
+
+export const deleteBookingSlot = (id: string) =>
+  remoteJson<{ ok: true }>(`/booking-slots/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+export const fetchOrders = () => remoteJson<BookingOrder[]>('/orders')
+
+export const createBookingOrder = (payload: CreateBookingPayload) =>
+  remoteJson<BookingOrder>('/orders', jsonBody('POST', payload))
+
+export const updateOrderStatus = (id: string, status: BookingOrderStatus, cancellationReason?: string) =>
+  remoteJson<BookingOrder>(
+    `/orders/${encodeURIComponent(id)}/status`,
+    jsonBody('PATCH', { status, cancellationReason }),
+  )
+
+export const deleteOrder = (id: string) =>
+  remoteJson<{ ok: true }>(`/orders/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+export const fetchUserAccounts = () => remoteJson<ApiUserAccount[]>('/users')
+
+export const createUserAccount = (input: UserAccountInput) =>
+  remoteJson<ApiUserAccount>('/users', jsonBody('POST', input))
+
+export const updateUserAccount = (id: string, input: Partial<Omit<UserAccountInput, 'id'>>) =>
+  remoteJson<ApiUserAccount>(`/users/${encodeURIComponent(id)}`, jsonBody('PUT', input))
+
+export const deleteUserAccount = (id: string) =>
+  remoteJson<{ ok: true }>(`/users/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+export const fetchAuditLogs = () => remoteJson<ApiAuditLog[]>('/audit-logs')
+
+export const resetOrders = () => remoteJson<{ ok: true }>('/reset/orders', { method: 'POST' })
+
+export const resetDatabase = () => remoteJson<{ ok: true }>('/reset/database', { method: 'POST' })
+
+export const fetchCityPasses = () => Promise.resolve(contentCityPasses as ApiCityPass[])
+export const fetchNeighborhoods = () => Promise.resolve(contentNeighborhoods as ApiNeighborhood[])
+export const fetchCityEvents = () => Promise.resolve(contentCityEvents as ApiCityEvent[])
+export const fetchThemeJourneys = () => Promise.resolve(contentThemeJourneys as ApiThemeJourney[])
+
+export const fetchHangzhouWeather = (force = false) => {
+  const query = force ? '?force=1' : ''
+  return remoteJson<ApiHangzhouWeather>(`/weather/hangzhou${query}`)
+}
+
+export const fetchOperations = async () => {
+  const [spots, slots, weather] = await Promise.all([
+    fetchScenicSpots(),
+    fetchBookingSlots(),
+    fetchHangzhouWeather().catch(() => staticWeather),
+  ])
+  const payload = buildOperationsPayload(
+    spots.map((spot) => ({
+      id: spot.id,
+      nameZh: spot.nameZh,
+      nameEn: spot.nameEn,
+      featured: spot.featured,
+    })),
+    slots.map((slot) => ({
+      scenicSpotId: slot.scenicSpotId,
+      date: slot.date,
+      timeRange: slot.timeRange,
+      capacity: slot.capacity,
+      remaining: slot.remaining,
+    })),
+    weather,
+  )
+  return payload as ApiOperationsPayload
 }
 
 export const fetchTravelerProfile = (id: string) => {
@@ -404,106 +422,21 @@ export const fetchTravelerProfile = (id: string) => {
     createdAt: timestamp,
     updatedAt: timestamp,
   }
-  return delay(profile)
+  return Promise.resolve(profile)
 }
 
-export const saveTravelerProfile = (_id: string, profile: ApiTravelerProfile) =>
-  delay(profile)
+export const saveTravelerProfile = (_id: string, profile: ApiTravelerProfile) => Promise.resolve(profile)
 
-export const createBookingSlot = (input: BookingSlotInput) =>
-  delay({
-    ...input,
-    id: input.id ?? `slot-${Date.now()}`,
-    booked: input.booked ?? 0,
-    spotName: spotNameMap[input.scenicSpotId] ?? '',
-    localBooked: 0,
-    remaining: (input.capacity) - (input.booked ?? 0),
-  } as ApiBookingSlot)
+export type LoginResponse = { token: string; user: AuthUser }
 
-export const updateBookingSlot = (
-  id: string,
-  input: Partial<Pick<BookingSlotInput, 'date' | 'timeRange' | 'capacity' | 'booked'>>,
-) => {
-  const slot = seedBookingSlots.find((s) => s.id === id)
-  if (!slot) return Promise.reject(new Error('时段不存在'))
-  const merged = { ...slot, ...input }
-  return delay(toApiBookingSlot(merged))
-}
+export const loginUser = (credentials: LoginCredentials) =>
+  remoteJson<LoginResponse>('/auth/login', jsonBody('POST', credentials))
 
-export const deleteBookingSlot = (_id: string) => delay({ ok: true as const })
+export const registerUser = (payload: RegisterPayload) =>
+  remoteJson<LoginResponse>('/auth/register', jsonBody('POST', payload))
 
-export const fetchOrders = () => delay(inMemoryOrders)
+export const fetchCurrentUser = () =>
+  remoteJson<AuthUser>('/auth/me')
 
-export const createBookingOrder = (payload: CreateBookingPayload) => {
-  const spot = scenicSpotsSeed.find((s) => s.id === payload.scenicSpotId)
-  const slot = seedBookingSlots.find((s) => s.id === payload.slotId)
-  const now = new Date()
-  const orderId = `HZ-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`
-
-  const order: BookingOrder = {
-    id: orderId,
-    scenicSpotId: payload.scenicSpotId,
-    slotId: payload.slotId,
-    cityPassId: payload.cityPassId,
-    ticketName: payload.ticketName,
-    spotName: spot?.nameZh ?? '',
-    visitDate: slot?.date ?? '',
-    timeRange: slot?.timeRange ?? '',
-    visitors: [payload.visitorName],
-    status: '待出行',
-    paymentMethod: payload.paymentMethod,
-    paymentStatus: payload.paymentMethod === 'free' ? '免费预约' : '支付完成',
-    amount: 0,
-    visitorCount: payload.visitorCount,
-    qrCodeText: `VERIFY-${orderId}`,
-    createdAt: now.toISOString(),
-    contactPhone: payload.visitorPhone,
-    contactEmail: payload.visitorEmail,
-    maskedIdNumber: payload.visitorIdNumber.replace(/.(?=.{4})/g, '*'),
-    voucherChannels: ['sms', 'email'],
-    refundStatus: '无需退款',
-    supportHotline: '12301',
-    supportEmail: 'tickets@hangzhou.example.gov.cn',
-    appealStatus: '可发起',
-    invoiceStatus: '可申请',
-  }
-
-  inMemoryOrders = [order, ...inMemoryOrders]
-  saveOrdersToStorage(inMemoryOrders)
-  return delay(order)
-}
-
-export const updateOrderStatus = (id: string, status: BookingOrderStatus, cancellationReason?: string) => {
-  const idx = inMemoryOrders.findIndex((o) => o.id === id)
-  if (idx < 0) return Promise.reject(new Error('订单不存在'))
-
-  const updated = {
-    ...inMemoryOrders[idx],
-    status,
-    ...(cancellationReason ? { cancellationReason } : {}),
-    ...(status === '已取消' ? {
-      refundStatus: inMemoryOrders[idx].amount && inMemoryOrders[idx].amount! > 0 ? '待处理' as const : '无需退款' as const,
-    } : {}),
-  }
-  inMemoryOrders = inMemoryOrders.map((o, i) => (i === idx ? updated : o))
-  saveOrdersToStorage(inMemoryOrders)
-  return delay(updated)
-}
-
-export const deleteOrder = (id: string) => {
-  inMemoryOrders = inMemoryOrders.filter((o) => o.id !== id)
-  saveOrdersToStorage(inMemoryOrders)
-  return delay({ ok: true as const })
-}
-
-export const resetOrders = () => {
-  inMemoryOrders = [...mockOrders]
-  saveOrdersToStorage(inMemoryOrders)
-  return delay({ ok: true as const })
-}
-
-export const resetDatabase = () => {
-  inMemoryOrders = [...mockOrders]
-  saveOrdersToStorage(inMemoryOrders)
-  return delay({ ok: true as const })
-}
+export const logoutUser = () =>
+  remoteJson<{ ok: true }>('/auth/logout', { method: 'POST' })

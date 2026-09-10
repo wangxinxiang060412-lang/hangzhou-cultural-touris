@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ArchiveHeader from '../common/ArchiveHeader.vue'
-import { routes } from '../../data/routes'
+import { routes } from '../../content/routes'
 import { pickLocalized, pickLocalizedList, t } from '../../i18n/site'
 </script>
 

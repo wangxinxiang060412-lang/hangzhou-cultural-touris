@@ -1,9 +1,8 @@
-import { scenicSpotsSeed } from '../data/scenicSpots'
-
 const scenicSpotAliases: Record<string, string> = {
   '西湖': 'west-lake',
   '西湖风景名胜区': 'west-lake',
   'west lake': 'west-lake',
+  'west lake scenic area': 'west-lake',
   '断桥': 'west-lake',
   '白堤': 'west-lake',
   '孤山': 'west-lake',
@@ -39,15 +38,13 @@ const normalize = (value: string) => value.trim().toLowerCase()
 
 export const findSpotIdFromText = (value: string) => {
   const normalized = normalize(value)
-  const alias = scenicSpotAliases[normalized]
-  if (alias) return alias
+  const direct = scenicSpotAliases[normalized]
+  if (direct) return direct
 
-  const direct = scenicSpotsSeed.find((spot) => {
-    const values = [spot.id, spot.nameZh, spot.nameEn, ...spot.tags].map(normalize)
-    return values.some((entry) => entry === normalized || entry.includes(normalized) || normalized.includes(entry))
-  })
-
-  return direct?.id ?? null
+  const alias = Object.entries(scenicSpotAliases).find(
+    ([label]) => normalized.includes(label) || label.includes(normalized),
+  )
+  return alias?.[1] ?? null
 }
 
 export const buildSpotDetailPath = (value: string) => {

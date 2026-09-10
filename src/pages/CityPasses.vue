@@ -3,11 +3,11 @@ import { computed, onMounted } from 'vue'
 import ArchiveHeader from '../components/common/ArchiveHeader.vue'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
-import { getSpotImage, getSpotImagePosition } from '../data/spotImages'
 import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, t } from '../i18n/site'
 import { cityPasses, ensureCatalog, findScenicSpot } from '../stores/catalog'
 import { localizeSpotName } from '../utils/localization'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../utils/scenicSpotImages'
 
 const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
   'zh-CN': zh,
@@ -27,14 +27,15 @@ const pageDescription = text(
 const passCards = computed(() =>
   cityPasses.value.map((pass) => {
     const primarySpot = findScenicSpot(pass.primarySpotId)
+    const coverSpot = findScenicSpot(pass.coverSpotId)
     const includedSpots = pass.includedSpotIds
       .map((spotId) => findScenicSpot(spotId))
       .filter((spot): spot is NonNullable<typeof spot> => Boolean(spot))
 
     return {
       ...pass,
-      image: getSpotImage(pass.coverSpotId),
-      imagePosition: getSpotImagePosition(pass.coverSpotId, 'featured'),
+      image: getScenicSpotImage(coverSpot),
+      imagePosition: getScenicSpotImagePosition(coverSpot, 'featured'),
       primarySpot,
       includedSpots,
       savings: Math.max(pass.marketPrice - pass.price, 0),

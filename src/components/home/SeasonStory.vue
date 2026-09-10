@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { seasons } from '../../data/seasons'
+import { seasons } from '../../content/seasons'
 import { pickLocalized, t } from '../../i18n/site'
 
 const activeSeasonIndex = ref(0)

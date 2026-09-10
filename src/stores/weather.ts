@@ -44,7 +44,7 @@ export const refreshHangzhouWeather = async (force = false) => {
   weatherLoading.value = true
   weatherError.value = ''
 
-  weatherLoadPromise = fetchHangzhouWeather()
+  weatherLoadPromise = fetchHangzhouWeather(force)
     .then((nextWeather) => {
       hangzhouWeather.value = nextWeather
       weatherError.value = nextWeather.syncError ?? ''

@@ -1,4 +1,4 @@
-import { routes } from '../data/routes'
+import { routes } from '../content/routes'
 import type {
   ApiCityEvent,
   ApiCityPass,

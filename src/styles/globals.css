@@ -342,19 +342,20 @@ article[tabindex='-1']:focus {
   color: var(--paper-light);
 }
 
-.entity-form__cancel:hover,
+.entity-form__cancel:hover:not(:disabled),
 .entity-form__cancel:focus-visible,
 .entity-form__submit:hover:not(:disabled),
 .entity-form__submit:focus-visible {
   outline: none;
 }
 
-.entity-form__cancel:hover,
+.entity-form__cancel:hover:not(:disabled),
 .entity-form__cancel:focus-visible {
   background: rgba(232, 239, 233, 0.94);
   color: var(--deep-green);
 }
 
+.entity-form__cancel:disabled,
 .entity-form__submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;

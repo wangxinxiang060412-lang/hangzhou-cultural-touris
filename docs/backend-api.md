@@ -1,37 +1,45 @@
-# 后端数据库与 API
+# 数据层与 API
 
-本项目已经从纯前端 mock 预约，升级为可落地的后端 API + SQLite 持久化结构。
+本项目现在包含完整数据层：
+
+- `server/`：Node API 服务，使用 Node 内置 SQLite，把数据持久化到 `data/hangzhou.sqlite`。
+- `src/services/api.ts`：前端 API 边界。设置 `VITE_API_BASE_URL` 时走后端；未设置时使用 `localStorage` 兜底。
+- `database/schema.sql`：MySQL 8 建库脚本，用于数据库课程设计说明和后续迁移。
 
 ## 运行
+
+```bash
+npm install
+npm run dev
+```
+
+前端 Vite 默认运行在 `http://localhost:5173`。
+
+完整模式：
 
 ```bash
 npm run dev:full
 ```
 
-该命令会同时启动：
+完整模式会同时启动前端和 `http://localhost:3001/api`，前端数据来自 SQLite 数据库。
 
-- 前端 Vite：`http://localhost:5173`
-- 后端 API：`http://localhost:4174`
-- SQLite 数据库文件：`data/west-lake.sqlite`
+## 技术点
 
-如需只启动后端：
-
-```bash
-npm run dev:api
-```
-
-可选安全配置：
-
-- `ADMIN_TOKEN`：设置后，景点、票种、时段、硬删除、重置等后台写接口必须携带 `x-admin-token`；用户取消订单仍可走公开取消流程。
-- `CORS_ORIGINS`：逗号分隔的允许来源，例如 `https://travel.example.gov.cn,https://admin.example.gov.cn`。未设置时保持本地开发友好。
-- `VITE_ADMIN_TOKEN`：本地管理端调试时可配置同一个值，前端请求会自动带上 `x-admin-token`。
+- Vue 3 组合式 API：页面和组件使用 `<script setup>`、`ref`、`reactive`、`computed`、`watch` 和生命周期钩子。
+- TypeScript：景点、票种、时段、订单、游客档案等核心数据都有类型定义。
+- Vue Router：使用 hash 模式，包含静态路由、动态路由、重定向、编程式导航、路由元信息和 404 页面。
+- Pinia：项目已接入 Pinia，并提供 `useCatalogStore` 作为目录数据仓库示例。
+- Node API + SQLite：后台 CRUD、预约下单、订单核销、取消、账号维护、审计日志和重置会写入 SQLite。
+- localStorage 兜底：无后端时仍能使用同一套前端页面和服务函数。
 
 ## 数据表
 
+- `user_accounts`：后台管理员与普通用户账号，包含角色、状态和密码哈希。
 - `scenic_spots`：景点主数据。
 - `ticket_types`：景点票种和价格。
 - `booking_slots`：可预约日期、时段、基础容量。
 - `booking_orders`：用户提交的预约订单、核销码、状态。
+- `audit_logs`：新增、修改、删除、核销、重置等关键写操作日志。
 
 订单状态只允许：
 
@@ -39,48 +47,50 @@ npm run dev:api
 - `已完成`
 - `已取消`
 
-## API
+## API 函数
 
-### 基础
+### 景点
 
-- `GET /api/health`：健康检查。
-- `GET /api/weather/hangzhou`：杭州天气缓存接口。
-- `GET /api/operations/hangzhou`：后端聚合的实时运行状态、客流、临时管制、演出/游船、节假日与天气提醒。
+- `fetchScenicSpots()`：景点列表。
+- `fetchScenicSpot(id)`：单个景点详情。
+- `createScenicSpot(input)`：新增景点。
+- `updateScenicSpot(id, input)`：修改景点。
+- `deleteScenicSpot(id)`：删除景点，存在未取消订单时会拒绝删除。
 
-### 景点 `scenic_spots`
+### 票种
 
-- `GET /api/scenic-spots`：景点列表。
-- `GET /api/scenic-spots/:id`：单个景点详情。
-- `POST /api/scenic-spots`：新增景点（`nameZh` / `nameEn` / `area` / `category` 必填，支持 `tags` 数组、`reservationRequired` / `paid` / `featured`）。
-- `PATCH /api/scenic-spots/:id`：部分更新，未提交字段保持原值。
-- `DELETE /api/scenic-spots/:id`：删除景点，存在未完成预约时会被拒绝；无活跃订单时会级联删除该景点的票种和时段。
+- `fetchTicketTypes(scenicSpotId?)`：票种列表，可选景点过滤。
+- `createTicketType(input)`：新增票种。
+- `updateTicketType(id, input)`：修改票种。
+- `deleteTicketType(id)`：删除票种。
 
-### 票种 `ticket_types`
+### 预约时段
 
-- `GET /api/ticket-types?scenicSpotId=...`：票种列表，可选景点过滤。
-- `POST /api/ticket-types`：新增票种，必须关联存在的景点。
-- `PATCH /api/ticket-types/:id`：部分更新价格、名称、适用人群、归属景点。
-- `DELETE /api/ticket-types/:id`：删除票种。
+- `fetchBookingSlots(scenicSpotId?)`：返回实时余量，包含 `booked`、`localBooked`、`remaining`。
+- `createBookingSlot(input)`：新增时段，同景点、同日期、同时段不能重复。
+- `updateBookingSlot(id, input)`：调整日期、时段、容量、基础占用。
+- `deleteBookingSlot(id)`：删除时段，存在未取消订单时会拒绝删除。
 
-### 预约时段 `booking_slots`
+### 订单
 
-- `GET /api/booking-slots?scenicSpotId=...`：返回时段实时余量（包含 `booked`、`localBooked`、`remaining`）。
-- `POST /api/booking-slots`：新增时段（同景点 + 日期 + 时段存在时返回 409）。
-- `PATCH /api/booking-slots/:id`：调整日期 / 时段 / 容量 / 基础占用。
-- `DELETE /api/booking-slots/:id`：删除时段，存在未取消订单时会被拒绝。
+- `fetchOrders()`：订单列表。
+- `createBookingOrder(payload)`：提交预约，并自动校验、占用余量、计算金额。
+- `updateOrderStatus(id, status)`：核销、取消或恢复订单。
+- `deleteOrder(id)`：硬删除订单记录。
 
-### 订单 `booking_orders`
+### 账号与审计
 
-- `GET /api/orders`：订单列表。
-- `POST /api/orders`：提交预约，自动计算余量占用。
-- `PATCH /api/orders/:id`：在 `待出行 / 已完成 / 已取消` 之间流转状态。
-- `DELETE /api/orders/:id`：硬删除订单记录。
+- `fetchUserAccounts()`：账号列表。
+- `createUserAccount(input)`：新增账号。
+- `updateUserAccount(id, input)`：修改账号角色、状态、联系方式或密码。
+- `deleteUserAccount(id)`：删除账号，最后一个启用管理员不可删除。
+- `fetchAuditLogs()`：最近操作日志。
 
 ### 运维
 
-- `POST /api/admin/reset-orders`：把订单表恢复为种子数据。
-- `POST /api/admin/reset-database`：清空并重新写入全部种子（景点 / 票种 / 时段 / 订单）。
+- `resetOrders()`：把订单表恢复为种子数据。
+- `resetDatabase()`：把景点、票种、时段、订单、账号和审计日志恢复为种子数据。
 
-## 后续接真实线上数据库
+## 后续接真实后端
 
-当前 SQLite 方案适合本地演示、作品集部署和小流量原型。后续如果接 Supabase、Neon 或自建 PostgreSQL，建议保持前端 `src/services/api.ts` 与 `src/stores/catalog.ts` 不变，只替换 `server/db.ts` 的数据库驱动和 SQL 方言。
+当前完整模式已经具备后端 API 和 SQLite 数据库。后续如果接 Express、Spring Boot、MySQL 或 Supabase，建议保持 `src/services/api.ts` 的函数签名不变，只替换 API 地址和后端持久化实现。数据库逻辑和 MySQL 表结构见 [database-design.md](database-design.md) 与 [../database/schema.sql](../database/schema.sql)。

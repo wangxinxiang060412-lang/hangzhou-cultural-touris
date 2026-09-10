@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import ArchiveHeader from '../common/ArchiveHeader.vue'
-import { getSpotImage, getSpotImagePosition } from '../../data/spotImages'
 import type { LocalizedText } from '../../i18n/site'
 import { pickLocalized } from '../../i18n/site'
+import { ensureCatalog, scenicSpots } from '../../stores/catalog'
 import { ensureDiscovery, neighborhoods } from '../../stores/discovery'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../../utils/scenicSpotImages'
 
 const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
   'zh-CN': zh,
@@ -14,14 +15,18 @@ const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => 
 })
 
 const cards = computed(() =>
-  neighborhoods.value.slice(0, 3).map((item) => ({
-    ...item,
-    image: getSpotImage(item.leadSpotId),
-    imagePosition: getSpotImagePosition(item.leadSpotId, 'featured'),
-  })),
+  neighborhoods.value.slice(0, 3).map((item) => {
+    const leadSpot = scenicSpots.value.find((spot) => spot.id === item.leadSpotId)
+    return {
+      ...item,
+      image: getScenicSpotImage(leadSpot),
+      imagePosition: getScenicSpotImagePosition(leadSpot, 'featured'),
+    }
+  }),
 )
 
 onMounted(() => {
+  void ensureCatalog()
   void ensureDiscovery()
 })
 </script>

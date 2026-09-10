@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import LoginModal from './components/layout/LoginModal.vue'
 import SiteHeader from './components/layout/SiteHeader.vue'
 import { siteLocale, t } from './i18n/site'
 import { translateStaticDom } from './utils/domI18n'
 import { scrollToAnchor } from './utils/scroll'
 
 const route = useRoute()
+const isAdminRoute = computed(() => route.name === 'admin')
 
 let revealObserver: IntersectionObserver | null = null
 let routeEffectsFrame = 0
@@ -134,7 +136,7 @@ onBeforeUnmount(() => {
 
 <template>
   <a class="skip-link" href="#main-content">{{ t('common.skipToContent') }}</a>
-  <SiteHeader />
+  <SiteHeader v-if="!isAdminRoute" />
   <!--
     Keying on `route.path` (not `route.fullPath`) so that updates to query —
     e.g. Booking writing the chosen `?spot=…&ticket=…` — don't tear down and
@@ -143,4 +145,5 @@ onBeforeUnmount(() => {
     fixes "browser back doesn't return to my previous scroll position".
   -->
   <router-view :key="route.path" />
+  <LoginModal />
 </template>

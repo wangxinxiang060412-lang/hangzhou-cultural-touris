@@ -11,10 +11,9 @@ import {
   accessibilityStatusLabels,
   facilityStatusLabels,
   getAccessibilityGuide,
-} from '../data/accessibilityGuides'
-import { getPracticalVisitGuide, practicalGuideLabels } from '../data/practicalGuides'
-import { getSpotImage, getSpotImagePosition } from '../data/spotImages'
-import { ticketingRules } from '../data/visitGuide'
+} from '../content/accessibilityGuides'
+import { getPracticalVisitGuide, practicalGuideLabels } from '../content/practicalGuides'
+import { ticketingRules } from '../content/visitGuide'
 import { pickLocalized, pickLocalizedList, t } from '../i18n/site'
 import { fetchBookingSlots, fetchTicketTypes } from '../services/api'
 import type { ApiBookingSlot, ApiTicketType } from '../services/api'
@@ -43,6 +42,7 @@ import {
   localizeTicketDescription,
   localizeTicketName,
 } from '../utils/localization'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../utils/scenicSpotImages'
 
 const route = useRoute()
 const { goBack } = useSmartBack('/scenic-spots')
@@ -56,7 +56,7 @@ const spot = computed(() => {
   return id ? findScenicSpot(id) : null
 })
 
-const heroImage = computed(() => (spot.value ? getSpotImage(spot.value.id) : null))
+const heroImage = computed(() => getScenicSpotImage(spot.value))
 const operationStatus = computed(() => (spot.value ? getSpotOperationStatus(spot.value.id) : null))
 const practicalGuide = computed(() => (spot.value ? getPracticalVisitGuide(spot.value.id) : null))
 const accessibilityGuide = computed(() => (spot.value ? getAccessibilityGuide(spot.value.id) : null))
@@ -324,7 +324,7 @@ watch(
                 v-if="heroImage"
                 :src="heroImage"
                 :alt="localizeSpotName(spot)"
-                :style="{ objectPosition: getSpotImagePosition(spot.id, 'detail') }"
+                :style="{ objectPosition: getScenicSpotImagePosition(spot, 'detail') }"
               />
               <div v-else class="detail-hero__placeholder" aria-hidden="true">{{ spot.nameEn.slice(0, 2) }}</div>
             </figure>

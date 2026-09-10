@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { getSpotImage, getSpotImagePosition } from '../../data/spotImages'
 import { t } from '../../i18n/site'
 import {
   bookingSlots,
@@ -13,6 +12,7 @@ import {
   localizeSpotCategory,
   localizeSpotName,
 } from '../../utils/localization'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../../utils/scenicSpotImages'
 
 const today = formatLocalDate(new Date())
 
@@ -27,7 +27,7 @@ const spotStates = computed(() =>
 
     return {
       ...spot,
-      image: getSpotImage(spot.id),
+      image: getScenicSpotImage(spot),
       todayState:
         todaySlots.length === 0
           ? spot.reservationRequired
@@ -76,7 +76,7 @@ onMounted(() => {
               v-if="spot.image"
               :src="spot.image"
               :alt="localizeSpotName(spot)"
-              :style="{ objectPosition: getSpotImagePosition(spot.id, 'featured') }"
+              :style="{ objectPosition: getScenicSpotImagePosition(spot, 'featured') }"
               loading="lazy"
               decoding="async"
             />

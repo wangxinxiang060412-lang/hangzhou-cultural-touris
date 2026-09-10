@@ -3,11 +3,11 @@ import { computed, onMounted } from 'vue'
 import ArchiveHeader from '../components/common/ArchiveHeader.vue'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
-import { getSpotImage, getSpotImagePosition } from '../data/spotImages'
 import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, t } from '../i18n/site'
 import { cityPasses, ensureCatalog, scenicSpots } from '../stores/catalog'
 import { ensureDiscovery, neighborhoods } from '../stores/discovery'
+import { getScenicSpotImage, getScenicSpotImagePosition } from '../utils/scenicSpotImages'
 
 const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
   'zh-CN': zh,
@@ -17,22 +17,25 @@ const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => 
 })
 
 const neighborhoodCards = computed(() =>
-  neighborhoods.value.map((item) => ({
-    ...item,
-    image: getSpotImage(item.leadSpotId),
-    imagePosition: getSpotImagePosition(item.leadSpotId, 'featured'),
-    routeTarget: item.suggestedRouteId ? `/routes#route-${item.suggestedRouteId}` : '',
-    passTarget: item.suggestedPassId ? `/booking?pass=${item.suggestedPassId}` : '',
-    spotLinks: item.featuredSpotIds
-      .map((id) => scenicSpots.value.find((spot) => spot.id === id))
-      .filter((spot) => Boolean(spot))
-      .map((spot) => ({
-        id: spot?.id ?? '',
-        nameZh: spot?.nameZh ?? '',
-      })),
-    passLabel:
-      cityPasses.value.find((pass) => pass.id === item.suggestedPassId)?.shortLabel ?? null,
-  })),
+  neighborhoods.value.map((item) => {
+    const leadSpot = scenicSpots.value.find((spot) => spot.id === item.leadSpotId)
+    return {
+      ...item,
+      image: getScenicSpotImage(leadSpot),
+      imagePosition: getScenicSpotImagePosition(leadSpot, 'featured'),
+      routeTarget: item.suggestedRouteId ? `/routes#route-${item.suggestedRouteId}` : '',
+      passTarget: item.suggestedPassId ? `/booking?pass=${item.suggestedPassId}` : '',
+      spotLinks: item.featuredSpotIds
+        .map((id) => scenicSpots.value.find((spot) => spot.id === id))
+        .filter((spot) => Boolean(spot))
+        .map((spot) => ({
+          id: spot?.id ?? '',
+          nameZh: spot?.nameZh ?? '',
+        })),
+      passLabel:
+        cityPasses.value.find((pass) => pass.id === item.suggestedPassId)?.shortLabel ?? null,
+    }
+  }),
 )
 
 onMounted(() => {

@@ -4,6 +4,7 @@ import type { RouteLocationNormalized, RouterScrollBehavior } from 'vue-router'
 
 import Home from '../pages/Home.vue'
 import { siteLocale, t } from '../i18n/site'
+import { currentUser, openLoginModal } from '../stores/auth'
 import { getHeaderOffset } from '../utils/scroll'
 
 const Admin = () => import('../pages/Admin.vue')
@@ -107,16 +108,16 @@ const router = createRouter({
       path: '/booking',
       name: 'booking',
       component: Booking,
-      meta: { titleKey: 'booking.title' },
+      meta: { titleKey: 'booking.title', requiresAuth: true },
     },
-    { path: '/orders', name: 'orders', component: Orders, meta: { titleKey: 'orders.title' } },
+    { path: '/orders', name: 'orders', component: Orders, meta: { titleKey: 'orders.title', requiresAuth: true } },
     {
       path: '/visit-guide',
       name: 'visit-guide',
       component: VisitGuide,
       meta: { titleKey: 'page.visitGuide' },
     },
-    { path: '/admin', name: 'admin', component: Admin, meta: { titleKey: 'admin.title' } },
+    { path: '/admin', name: 'admin', component: Admin, meta: { titleKey: 'admin.title', requiresAuth: true, requiresAdmin: true } },
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
@@ -124,6 +125,22 @@ const router = createRouter({
       meta: { titleKey: 'notfound.title' },
     },
   ],
+})
+
+router.beforeEach((to, from) => {
+  const requiresAuth = Boolean(to.meta.requiresAuth)
+  const requiresAdmin = Boolean(to.meta.requiresAdmin)
+
+  if (requiresAuth && !currentUser.value) {
+    openLoginModal(to.fullPath)
+    return from.name ? false : { path: '/' }
+  }
+
+  if (requiresAdmin && currentUser.value?.role !== '管理员') {
+    return { path: '/orders' }
+  }
+
+  return true
 })
 
 const SUFFIX_BY_LOCALE: Record<string, string> = {

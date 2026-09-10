@@ -3,7 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { LocalizedText } from '../../i18n/site'
 import { localeOptions, pickLocalized, setSiteLocale, siteLocale, t } from '../../i18n/site'
+import { currentUser, isLoggedIn, openLoginModal, userAvatarColor, userInitial } from '../../stores/auth'
 import CommandPalette from './CommandPalette.vue'
+import UserAvatar from './UserAvatar.vue'
+import UserMenu from './UserMenu.vue'
 
 const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => ({
   'zh-CN': zh,
@@ -59,7 +62,9 @@ const isPastHero = ref(false)
 const isMenuOpen = ref(false)
 const isMegaOpen = ref(false)
 const isDiscoverExpanded = ref(false)
+const isUserMenuOpen = ref(false)
 const paletteOpen = ref(false)
+const navGroupRef = ref<HTMLElement | null>(null)
 let rafId = 0
 let ticking = false
 
@@ -110,11 +115,32 @@ const closePalette = () => {
   paletteOpen.value = false
 }
 
-const openMega = () => {
-  isMegaOpen.value = true
+const openLogin = () => {
+  openLoginModal()
+  closeMenu()
+  isUserMenuOpen.value = false
 }
+
+const toggleUserMenu = () => {
+  isUserMenuOpen.value = !isUserMenuOpen.value
+}
+
+const closeUserMenu = () => {
+  isUserMenuOpen.value = false
+}
+
 const closeMega = () => {
   isMegaOpen.value = false
+}
+const handleMegaTriggerClick = () => {
+  isMegaOpen.value = !isMegaOpen.value
+}
+
+const onDocumentPointerDown = (event: PointerEvent) => {
+  if (!isMegaOpen.value) return
+  const target = event.target
+  if (target instanceof Node && navGroupRef.value?.contains(target)) return
+  closeMega()
 }
 
 const onKeydown = (event: KeyboardEvent) => {
@@ -122,6 +148,7 @@ const onKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
     closeMenu()
     closeMega()
+    closeUserMenu()
     return
   }
   // ⌘K / Ctrl+K — toggle the command palette globally. Prevent the browser
@@ -137,12 +164,14 @@ onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll, { passive: true })
   window.addEventListener('keydown', onKeydown)
+  document.addEventListener('pointerdown', onDocumentPointerDown)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onScroll)
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   document.body.classList.remove('is-menu-open')
   if (rafId) {
     window.cancelAnimationFrame(rafId)
@@ -154,6 +183,7 @@ watch(
   () => {
     closeMenu()
     closeMega()
+    closeUserMenu()
     closePalette()
     window.requestAnimationFrame(updateScroll)
   },
@@ -181,9 +211,8 @@ watch(isMenuOpen, (open) => {
       <nav class="site-header__nav" :aria-label="t('nav.menuLabel')">
         <!-- Discover dropdown trigger + mega-menu -->
         <div
+          ref="navGroupRef"
           class="site-header__nav-group"
-          @mouseenter="openMega"
-          @mouseleave="closeMega"
         >
           <button
             type="button"
@@ -191,8 +220,7 @@ watch(isMenuOpen, (open) => {
             :class="{ 'is-active': isDiscoverActive, 'is-open': isMegaOpen }"
             :aria-haspopup="true"
             :aria-expanded="isMegaOpen"
-            @click="isMegaOpen = !isMegaOpen"
-            @focus="openMega"
+            @click="handleMegaTriggerClick"
           >
             {{ t('nav.discover') }}
             <span class="site-header__nav-caret" aria-hidden="true">▾</span>
@@ -257,6 +285,31 @@ watch(isMenuOpen, (open) => {
           </option>
         </select>
       </label>
+
+      <div class="site-header__account">
+        <button
+          v-if="isLoggedIn"
+          type="button"
+          class="site-header__account-button"
+          :aria-expanded="isUserMenuOpen"
+          aria-haspopup="menu"
+          @click="toggleUserMenu"
+        >
+          <UserAvatar :initial="userInitial" :color="userAvatarColor" :size="30" />
+          <span>{{ currentUser?.displayName }}</span>
+        </button>
+        <button v-else type="button" class="site-header__login-button" @click="openLogin">
+          登录
+        </button>
+
+        <Transition name="mega">
+          <UserMenu
+            v-if="isUserMenuOpen && isLoggedIn"
+            class="site-header__user-menu"
+            @close="closeUserMenu"
+          />
+        </Transition>
+      </div>
 
       <button
         type="button"
@@ -333,6 +386,30 @@ watch(isMenuOpen, (open) => {
           </select>
         </label>
 
+        <div class="mobile-panel__account">
+          <template v-if="isLoggedIn">
+            <div class="mobile-panel__account-profile">
+              <UserAvatar :initial="userInitial" :color="userAvatarColor" :size="38" />
+              <span>{{ currentUser?.displayName }}</span>
+              <small>{{ currentUser?.role }}</small>
+            </div>
+            <RouterLink to="/orders" class="mobile-panel__account-link" @click="closeMenu">
+              我的预约
+            </RouterLink>
+            <RouterLink
+              v-if="currentUser?.role === '管理员'"
+              to="/admin"
+              class="mobile-panel__account-link"
+              @click="closeMenu"
+            >
+              运营后台
+            </RouterLink>
+          </template>
+          <button v-else type="button" class="mobile-panel__login" @click="openLogin">
+            登录 / 注册
+          </button>
+        </div>
+
         <p
           v-if="false"
           aria-hidden="true"
@@ -379,12 +456,12 @@ watch(isMenuOpen, (open) => {
   border-bottom-color: rgba(16, 20, 18, 0.08);
 }
 
-/* New header grid: brand | nav | search-chip | locale | menu-toggle. The
+/* New header grid: brand | nav | search-chip | locale | account | menu-toggle. The
    nav and search columns flex to absorb the remaining width. */
 .site-header__inner {
   position: relative;
   display: grid;
-  grid-template-columns: auto auto minmax(220px, 1fr) auto auto;
+  grid-template-columns: auto auto minmax(220px, 1fr) auto auto auto;
   align-items: center;
   gap: clamp(14px, 2vw, 32px);
   height: var(--site-header-h, 52px);
@@ -675,6 +752,64 @@ watch(isMenuOpen, (open) => {
   outline: none;
 }
 
+.site-header__account {
+  position: relative;
+  justify-self: end;
+}
+
+.site-header__account-button,
+.site-header__login-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid rgba(31, 58, 52, 0.14);
+  border-radius: 999px;
+  background: rgba(31, 58, 52, 0.06);
+  color: var(--deep-green);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.site-header__account-button {
+  gap: 8px;
+  max-width: 148px;
+  padding: 3px 11px 3px 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.site-header__account-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-header__login-button {
+  padding: 0 16px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+
+.site-header__account-button:hover,
+.site-header__account-button:focus-visible,
+.site-header__account-button[aria-expanded='true'],
+.site-header__login-button:hover,
+.site-header__login-button:focus-visible {
+  background: rgba(31, 58, 52, 0.12);
+  border-color: rgba(31, 58, 52, 0.24);
+  outline: none;
+}
+
+.site-header__user-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 8;
+}
+
 .mobile-panel__locale select {
   min-width: 110px;
   border: 0;
@@ -757,7 +892,7 @@ watch(isMenuOpen, (open) => {
 /* === Responsive collapse points ======================================= */
 @media (max-width: 1080px) {
   .site-header__inner {
-    grid-template-columns: auto auto minmax(180px, 1fr) auto auto;
+    grid-template-columns: auto auto minmax(180px, 1fr) auto auto auto;
     gap: 14px;
   }
   .site-header__search-placeholder {
@@ -777,7 +912,8 @@ watch(isMenuOpen, (open) => {
 
   .site-header__nav,
   .site-header__search-chip,
-  .site-header__locale {
+  .site-header__locale,
+  .site-header__account {
     display: none;
   }
 
@@ -966,6 +1102,51 @@ watch(isMenuOpen, (open) => {
   .mobile-panel__locale {
     display: grid;
     gap: 8px;
+  }
+
+  .mobile-panel__account {
+    display: grid;
+    gap: 8px;
+    border-top: 1px solid rgba(16, 20, 18, 0.08);
+    padding-top: 14px;
+  }
+
+  .mobile-panel__account-profile {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+  }
+
+  .mobile-panel__account-profile span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    letter-spacing: 0.04em;
+  }
+
+  .mobile-panel__account-profile small {
+    color: rgba(16, 20, 18, 0.46);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+  }
+
+  .mobile-panel__account-link,
+  .mobile-panel__login {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    border: 1px solid rgba(31, 58, 52, 0.14);
+    border-radius: 999px;
+    background: rgba(31, 58, 52, 0.06);
+    color: var(--deep-green);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 0.08em;
   }
 
   .mobile-menu-enter-active,

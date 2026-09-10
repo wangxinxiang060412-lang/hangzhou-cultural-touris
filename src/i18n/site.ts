@@ -114,6 +114,12 @@ const messages: Record<string, LocalizedText> = {
     'ja-JP': '予約記録',
     'ko-KR': '예약 내역',
   },
+  'nav.admin': {
+    'zh-CN': '运营管理',
+    'en-US': 'Admin',
+    'ja-JP': '運営管理',
+    'ko-KR': '운영 관리',
+  },
   'nav.menu': {
     'zh-CN': '菜单',
     'en-US': 'Menu',
@@ -149,6 +155,12 @@ const messages: Record<string, LocalizedText> = {
     'en-US': 'Reservations',
     'ja-JP': '予約記録',
     'ko-KR': '예약 기록',
+  },
+  'nav.note.admin': {
+    'zh-CN': '后台维护',
+    'en-US': 'Operations',
+    'ja-JP': '管理画面',
+    'ko-KR': '관리 화면',
   },
   'nav.note.routes': {
     'zh-CN': '慢游路线',

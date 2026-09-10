@@ -15,10 +15,10 @@ const text = (en: string, ja: string, ko: string): LocaleText => ({
 const replacements: Record<string, LocaleText> = {
   票务管理后台: text('Ticketing Admin', 'チケット管理', '티켓 관리'),
   票务管理: text('Ticketing', 'チケット管理', '티켓 관리'),
-  '后台与后端 API + SQLite 同步，可直接新增、修改、删除景点 / 票种 / 时段 / 订单，所有操作实时写入数据库。': text(
-    'The admin panel syncs with the backend API and SQLite. Create, edit and delete spots, tickets, slots and orders in real time.',
-    '管理画面はバックエンド API と SQLite に同期し、景点・券種・時間帯・注文をリアルタイムに管理できます。',
-    '관리 화면은 백엔드 API와 SQLite에 동기화되며 명소, 티켓, 시간대, 주문을 실시간으로 관리합니다.',
+  '后台与本地持久化 API 同步，可直接新增、修改、删除景点 / 票种 / 时段 / 订单，所有操作实时写入浏览器本地数据库。': text(
+    'The admin panel syncs with a local persistent API. Create, edit and delete spots, tickets, slots and orders in the browser database.',
+    '管理画面はローカル永続 API と同期し、景点・券種・時間帯・注文をブラウザ内データベースで管理できます。',
+    '관리 화면은 로컬 지속 API와 동기화되며 명소, 티켓, 시간대, 주문을 브라우저 데이터베이스에 저장합니다.',
   ),
   查看前台预约: text('View Tickets & Visits', 'チケット案内を見る', '티켓 안내 보기'),
   查看预约记录: text('View Orders', '予約記録を見る', '예약 기록 보기'),
@@ -77,7 +77,7 @@ const replacements: Record<string, LocaleText> = {
   时段: text('Time Slot', '時間帯', '시간대'),
   容量: text('Capacity', '定員', '수용량'),
   基础已约: text('Base Booked', '基本予約数', '기본 예약'),
-  数据库占用: text('DB Used', 'DB 使用数', 'DB 점유'),
+  订单占用: text('Order Used', '注文使用数', '주문 점유'),
   剩余: text('Remaining', '残数', '잔여'),
   区域: text('Area', 'エリア', '지역'),
   分类: text('Category', '分類', '분류'),

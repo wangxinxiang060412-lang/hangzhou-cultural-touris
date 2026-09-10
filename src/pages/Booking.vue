@@ -1,16 +1,33 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageCrumbs from '../components/common/PageCrumbs.vue'
 import SiteFooter from '../components/layout/SiteFooter.vue'
 import { useSmartBack } from '../composables/useSmartBack'
-import { ticketingRules, visitGuidePolicies } from '../data/visitGuide'
-import type { BookingPaymentMethod } from '../data/mockOrders'
+import { ticketingRules, visitGuidePolicies } from '../content/visitGuide'
+import type { BookingPaymentMethod } from '../types/booking'
 import type { LocalizedText } from '../i18n/site'
-import { pickLocalized, t } from '../i18n/site'
+import { pickLocalized, siteLocale, t } from '../i18n/site'
 import { createBookingOrder, fetchBookingSlots, fetchTicketTypes } from '../services/api'
 import type { ApiBookingSlot, ApiTicketType } from '../services/api'
 import { cityPasses, ensureCatalog, scenicSpots } from '../stores/catalog'
+import { currentUser } from '../stores/auth'
+import {
+  createBookingDateOptions,
+  isSlotSelectable,
+  isSlotTimeExpired,
+  isSlotWithinBookingWindow,
+} from '../utils/bookingSlots'
+import {
+  BOOKING_VISITOR_LIMITS,
+  getDefaultPaymentMethod,
+  hasBookingQueryChanged,
+  isValidEmail,
+  isValidIdNumber,
+  isValidPhone,
+  isValidVisitorCount,
+  readQueryParam,
+} from '../utils/bookingForm'
 import { formatLocalDate } from '../utils/date'
 import {
   localizeSpotArea,
@@ -35,6 +52,8 @@ const selectedSpotId = ref('')
 const selectedCityPassId = ref('')
 const selectedTicketId = ref('')
 const selectedSlotId = ref('')
+const today = formatLocalDate(new Date())
+const selectedDate = ref(today)
 const selectedPaymentMethod = ref<BookingPaymentMethod>('free')
 const visitorName = ref('')
 const visitorPhone = ref('')
@@ -48,24 +67,13 @@ const slots = ref<ApiBookingSlot[]>([])
 const tickets = ref<ApiTicketType[]>([])
 const apiError = ref('')
 const isSubmitting = ref(false)
-const today = formatLocalDate(new Date())
+const isDatePickerOpen = ref(false)
+const datePickerEl = ref<HTMLElement | null>(null)
 
-const requestedSpotId = computed(() => {
-  const value = route.query.spot
-  return typeof value === 'string' ? value : ''
-})
-const requestedPassId = computed(() => {
-  const value = route.query.pass
-  return typeof value === 'string' ? value : ''
-})
-const requestedTicketId = computed(() => {
-  const value = route.query.ticket
-  return typeof value === 'string' ? value : ''
-})
-const requestedSlotId = computed(() => {
-  const value = route.query.slot
-  return typeof value === 'string' ? value : ''
-})
+const requestedSpotId = computed(() => readQueryParam(route.query.spot))
+const requestedPassId = computed(() => readQueryParam(route.query.pass))
+const requestedTicketId = computed(() => readQueryParam(route.query.ticket))
+const requestedSlotId = computed(() => readQueryParam(route.query.slot))
 
 const selectedSpot = computed(() => scenicSpots.value.find((spot) => spot.id === selectedSpotId.value) ?? null)
 const selectedCityPass = computed(
@@ -74,24 +82,43 @@ const selectedCityPass = computed(
 const selectedTicket = computed(() => tickets.value.find((ticket) => ticket.id === selectedTicketId.value))
 const selectedSlot = computed(() => slots.value.find((slot) => slot.id === selectedSlotId.value))
 const selectedSlotRemaining = computed(() => selectedSlot.value?.remaining ?? 0)
+const bookingDateOptions = computed(() => createBookingDateOptions(new Date(), siteLocale.value))
+const slotsForSelectedDate = computed(() => slots.value.filter((slot) => slot.date === selectedDate.value))
+const selectableSlotsForSelectedDate = computed(() => slotsForSelectedDate.value.filter((slot) => isSlotSelectable(slot)))
+const selectedDateOption = computed(
+  () => bookingDateOptions.value.find((option) => option.value === selectedDate.value) ?? bookingDateOptions.value[0] ?? null,
+)
+const slotStateByDate = computed(() =>
+  bookingDateOptions.value.map((dateOption) => {
+    const dateSlots = slots.value.filter((slot) => slot.date === dateOption.value)
+    const availableSlots = dateSlots.filter((slot) => isSlotSelectable(slot))
+    const expiredSlots = dateSlots.filter((slot) => isSlotTimeExpired(slot))
+    const fullSlots = dateSlots.filter((slot) => !isSlotTimeExpired(slot) && slot.remaining <= 0)
+    return {
+      ...dateOption,
+      totalCount: dateSlots.length,
+      availableCount: availableSlots.length,
+      expiredCount: expiredSlots.length,
+      fullCount: fullSlots.length,
+      isSelected: selectedDate.value === dateOption.value,
+      isUnavailable: dateSlots.length === 0 || availableSlots.length === 0,
+      hasExpired: expiredSlots.length > 0,
+      hasFull: fullSlots.length > 0,
+    }
+  }),
+)
+const selectedDateSlots = computed(() => slots.value.filter((slot) => slot.date === selectedDate.value))
+const hasSelectableSlotOnSelectedDate = computed(() => selectableSlotsForSelectedDate.value.length > 0)
 const totalAmount = computed(
   () => (selectedCityPass.value?.price ?? selectedTicket.value?.price ?? 0) * visitorCount.value,
 )
 const hasSelectedSpot = computed(() => Boolean(selectedSpotId.value))
 const isCityPassMode = computed(() => Boolean(selectedCityPass.value))
 
-const visitorCountIsValid = computed(
-  () =>
-    typeof visitorCount.value === 'number' &&
-    Number.isFinite(visitorCount.value) &&
-    visitorCount.value >= 1 &&
-    visitorCount.value <= 8,
-)
-const phoneIsValid = computed(() => /^[0-9+\-\s]{7,20}$/.test(visitorPhone.value.trim()))
-const emailIsValid = computed(
-  () => visitorEmail.value.trim().length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(visitorEmail.value.trim()),
-)
-const idNumberIsValid = computed(() => visitorIdNumber.value.trim().length >= 4)
+const visitorCountIsValid = computed(() => isValidVisitorCount(visitorCount.value))
+const phoneIsValid = computed(() => isValidPhone(visitorPhone.value))
+const emailIsValid = computed(() => isValidEmail(visitorEmail.value))
+const idNumberIsValid = computed(() => isValidIdNumber(visitorIdNumber.value))
 const paymentMethodIsValid = computed(
   () => totalAmount.value === 0 || selectedPaymentMethod.value !== 'free',
 )
@@ -106,7 +133,11 @@ const paymentMethodOptions = computed(() =>
       ],
 )
 
-const canGoStep2 = computed(() => Boolean((selectedCityPassId.value || selectedTicketId.value) && selectedSlotId.value))
+const canGoStep2 = computed(() => {
+  if (!selectedCityPassId.value && !selectedTicketId.value) return false
+  if (!selectedSlot.value) return false
+  return isSlotSelectable(selectedSlot.value)
+})
 const canSubmit = computed(
   () =>
     canGoStep2.value &&
@@ -117,6 +148,7 @@ const canSubmit = computed(
     visitorCountIsValid.value &&
     paymentMethodIsValid.value &&
     selectedSlotRemaining.value >= visitorCount.value &&
+    Boolean(selectedSlot.value && isSlotSelectable(selectedSlot.value)) &&
     !isSubmitting.value,
 )
 
@@ -145,8 +177,13 @@ const paymentMethodText = computed(() => {
   }
 })
 
+const selectedDateText = computed(() => {
+  if (!selectedDateOption.value) return selectedDate.value
+  return `${selectedDateOption.value.label} · ${selectedDateOption.value.weekday}`
+})
+
 const syncBookingQuery = async (patch: Record<string, string | undefined>) => {
-  const nextQuery = { ...route.query } as Record<string, string>
+  const nextQuery = { ...route.query } as Record<string, string | undefined>
 
   Object.entries(patch).forEach(([key, value]) => {
     if (value) {
@@ -156,17 +193,7 @@ const syncBookingQuery = async (patch: Record<string, string | undefined>) => {
     }
   })
 
-  const currentSpot = typeof route.query.spot === 'string' ? route.query.spot : undefined
-  const currentPass = typeof route.query.pass === 'string' ? route.query.pass : undefined
-  const currentTicket = typeof route.query.ticket === 'string' ? route.query.ticket : undefined
-  const currentSlot = typeof route.query.slot === 'string' ? route.query.slot : undefined
-
-  if (
-    currentSpot === nextQuery.spot &&
-    currentPass === nextQuery.pass &&
-    currentTicket === nextQuery.ticket &&
-    currentSlot === nextQuery.slot
-  ) {
+  if (!hasBookingQueryChanged(route.query, nextQuery)) {
     return
   }
 
@@ -176,12 +203,13 @@ const syncBookingQuery = async (patch: Record<string, string | undefined>) => {
 const resetSelection = () => {
   const preferredTicket = tickets.value.find((ticket) => ticket.id === requestedTicketId.value)
   const preferredSlot = slots.value.find(
-    (slot) => slot.id === requestedSlotId.value && slot.remaining > 0,
+    (slot) => slot.id === requestedSlotId.value && isSlotSelectable(slot),
   )
   selectedTicketId.value = selectedCityPass.value ? '' : preferredTicket?.id ?? tickets.value[0]?.id ?? ''
-  selectedSlotId.value =
-    preferredSlot?.id ?? slots.value.find((slot) => slot.remaining > 0)?.id ?? slots.value[0]?.id ?? ''
-  selectedPaymentMethod.value = totalAmount.value > 0 ? 'alipay' : 'free'
+  selectedDate.value = preferredSlot?.date ?? bookingDateOptions.value[0]?.value ?? today
+  selectedSlotId.value = preferredSlot?.id ?? selectableSlotsForSelectedDate.value[0]?.id ?? ''
+  selectedPaymentMethod.value = getDefaultPaymentMethod(totalAmount.value)
+  isDatePickerOpen.value = false
   step.value = 1
   submittedOrderId.value = ''
   submittedQrCode.value = ''
@@ -192,7 +220,9 @@ const clearLoadedOptions = () => {
   tickets.value = []
   selectedTicketId.value = ''
   selectedSlotId.value = ''
+  selectedDate.value = bookingDateOptions.value[0]?.value ?? today
   selectedPaymentMethod.value = 'free'
+  isDatePickerOpen.value = false
   step.value = 1
   submittedOrderId.value = ''
   submittedQrCode.value = ''
@@ -216,12 +246,12 @@ const loadSlots = async (resetCurrentSelection = true) => {
       fetchBookingSlots(selectedSpotId.value),
       fetchTicketTypes(selectedSpotId.value),
     ])
-    slots.value = nextSlots.filter((slot) => slot.date >= today).slice(0, 12)
+    slots.value = nextSlots.filter((slot) => isSlotWithinBookingWindow(slot))
     tickets.value = nextTickets
     if (resetCurrentSelection) {
       resetSelection()
     } else if (totalAmount.value > 0 && selectedPaymentMethod.value === 'free') {
-      selectedPaymentMethod.value = 'alipay'
+      selectedPaymentMethod.value = getDefaultPaymentMethod(totalAmount.value)
     }
   } catch (error) {
     slots.value = []
@@ -362,7 +392,7 @@ watch(
   async (value, previous) => {
     if (!value) {
       clearLoadedOptions()
-      if (route.query.spot || route.query.pass || route.query.ticket || route.query.slot) {
+      if (requestedSpotId.value || requestedPassId.value || requestedTicketId.value || requestedSlotId.value) {
         await syncBookingQuery({
           spot: undefined,
           pass: undefined,
@@ -376,7 +406,7 @@ watch(
     const spotChanged = Boolean(previous && previous !== value)
     const passId = selectedCityPassId.value || undefined
     const isPassModeNow = Boolean(passId)
-    if (route.query.spot !== value || (spotChanged && (route.query.ticket || route.query.slot))) {
+    if (requestedSpotId.value !== value || (spotChanged && (requestedTicketId.value || requestedSlotId.value))) {
       await syncBookingQuery({
         spot: value,
         pass: passId,
@@ -398,7 +428,7 @@ watch(totalAmount, (amount) => {
   }
 
   if (selectedPaymentMethod.value === 'free') {
-    selectedPaymentMethod.value = 'alipay'
+    selectedPaymentMethod.value = getDefaultPaymentMethod(amount)
   }
 })
 
@@ -406,11 +436,44 @@ watch([requestedTicketId, requestedSlotId], () => {
   if (step.value !== 1 || isCityPassMode.value) return
   const preferredTicket = tickets.value.find((ticket) => ticket.id === requestedTicketId.value)
   const preferredSlot = slots.value.find(
-    (slot) => slot.id === requestedSlotId.value && slot.remaining > 0,
+    (slot) => slot.id === requestedSlotId.value && isSlotSelectable(slot),
   )
   if (preferredTicket) selectedTicketId.value = preferredTicket.id
-  if (preferredSlot) selectedSlotId.value = preferredSlot.id
+  if (preferredSlot) {
+    selectedDate.value = preferredSlot.date
+    selectedSlotId.value = preferredSlot.id
+  }
 })
+
+watch(selectedDate, () => {
+  if (!selectedSlot.value || selectedSlot.value.date !== selectedDate.value || !isSlotSelectable(selectedSlot.value)) {
+    selectedSlotId.value = selectableSlotsForSelectedDate.value[0]?.id ?? ''
+  }
+})
+
+watch(selectedDate, () => {
+  isDatePickerOpen.value = false
+})
+
+const closeDatePicker = () => {
+  isDatePickerOpen.value = false
+}
+
+const toggleDatePicker = () => {
+  isDatePickerOpen.value = !isDatePickerOpen.value
+}
+
+const selectDate = (date: string) => {
+  selectedDate.value = date
+  isDatePickerOpen.value = false
+}
+
+const handleDocumentPointerDown = (event: PointerEvent) => {
+  if (!isDatePickerOpen.value) return
+  const target = event.target as Node | null
+  if (target && datePickerEl.value?.contains(target)) return
+  isDatePickerOpen.value = false
+}
 
 // Whenever the booking step changes, snap the booking-flow back to the top
 // so the user always sees the new step from its start (instead of staying
@@ -422,6 +485,17 @@ watch(step, async () => {
 
 onMounted(() => {
   void ensureCatalog()
+  if (currentUser.value) {
+    if (!visitorName.value) visitorName.value = currentUser.value.displayName
+    if (!visitorPhone.value && currentUser.value.phoneMasked && !currentUser.value.phoneMasked.includes('*')) {
+      visitorPhone.value = currentUser.value.phoneMasked
+    }
+  }
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
 })
 </script>
 
@@ -623,13 +697,81 @@ onMounted(() => {
               <p v-else-if="selectedCityPass" class="visitor-form__hint">
                 {{ pickLocalized(text('先预约激活时段，套票内其他权益可按产品说明继续使用。', 'Reserve an activation slot first, then use the rest of the pass according to the product notes.', 'まず有効化枠を予約し、その後は商品説明に沿って他の特典を使います。', '먼저 활성화 시간대를 예약하고, 이후 다른 혜택은 상품 안내에 따라 이용합니다.')) }}
               </p>
+
+              <div v-if="hasSelectedSpot" ref="datePickerEl" class="booking-date-picker">
+                <button
+                  type="button"
+                  class="booking-date-picker__toggle"
+                  :aria-expanded="isDatePickerOpen"
+                  aria-haspopup="dialog"
+                  @click="toggleDatePicker"
+                >
+                  <span class="booking-date-picker__label">
+                    <small>{{ t('booking.section.slot') }}</small>
+                    <strong>{{ selectedDateText }}</strong>
+                  </span>
+                  <span class="booking-date-picker__chevron" aria-hidden="true">⌄</span>
+                </button>
+
+                <Transition name="booking-date-picker">
+                  <div v-if="isDatePickerOpen" class="booking-date-picker__panel" role="dialog" aria-label="选择预约日期">
+                    <div class="booking-date-picker__head">
+                      <div>
+                        <p>{{ t('booking.section.slot') }}</p>
+                        <h3>{{ pickLocalized(text('选择近七天预约日期', 'Pick a reservation date within 7 days', '7日以内の予約日を選択', '7일 이내 예약일 선택')) }}</h3>
+                      </div>
+                      <button type="button" class="booking-date-picker__close" @click="closeDatePicker">×</button>
+                    </div>
+
+                    <div class="booking-date-picker__grid" role="listbox" :aria-label="t('booking.section.slotTitle')">
+                      <button
+                        v-for="dateOption in slotStateByDate"
+                        :key="dateOption.value"
+                        type="button"
+                        class="booking-date-picker__day"
+                        :class="{
+                          'is-selected': dateOption.isSelected,
+                          'is-unavailable': dateOption.isUnavailable,
+                        }"
+                        :aria-selected="dateOption.isSelected"
+                        @click="selectDate(dateOption.value)"
+                      >
+                        <span>{{ dateOption.label }}</span>
+                        <strong>{{ dateOption.value.slice(5).replace('-', '/') }}</strong>
+                        <small>{{ dateOption.weekday }}</small>
+                        <em>
+                          {{
+                            dateOption.availableCount > 0
+                              ? t('booking.slot.remaining', { count: dateOption.availableCount })
+                              : dateOption.totalCount === 0
+                                ? pickLocalized(text('暂无时段', 'No slots', '時間帯なし', '시간대 없음'))
+                                : pickLocalized(text('仅剩过期/售罄', 'Expired or full', '期限切れ/満席', '만료 또는 마감'))
+                          }}
+                        </em>
+                      </button>
+                    </div>
+                  </div>
+                </Transition>
+              </div>
+
+              <div class="slot-options__header" v-if="hasSelectedSpot">
+                <p>
+                  {{
+                    hasSelectableSlotOnSelectedDate
+                      ? pickLocalized(text('可预约时段', 'Available time slots', '予約可能な時間帯', '예약 가능한 시간대'))
+                      : pickLocalized(text('该日期暂无可预约时段', 'No available slots on this date', 'この日は予約可能な時間帯がありません', '이 날짜에는 예약 가능한 시간대가 없습니다'))
+                  }}
+                </p>
+                <small>{{ selectedDate }}</small>
+              </div>
+
               <label
-                v-for="slot in slots"
+                v-for="slot in selectedDateSlots"
                 :key="slot.id"
                 class="slot-option"
                 :class="{
                   'is-selected': selectedSlotId === slot.id,
-                  'is-disabled': slot.remaining <= 0,
+                  'is-disabled': !isSlotSelectable(slot),
                 }"
               >
                 <input
@@ -637,15 +779,26 @@ onMounted(() => {
                   type="radio"
                   name="slot"
                   :value="slot.id"
-                  :disabled="slot.remaining <= 0"
+                  :disabled="!isSlotSelectable(slot)"
                 />
                 <span>{{ slot.date }}</span>
                 <strong>{{ slot.timeRange }}</strong>
-                <small>{{ slot.remaining > 0 ? t('booking.slot.remaining', { count: slot.remaining }) : t('booking.slot.full') }}</small>
+                <small>
+                  {{
+                    isSlotTimeExpired(slot)
+                      ? pickLocalized(text('已过办理时间', 'Time passed', '時間超過', '시간 지남'))
+                      : slot.remaining > 0
+                        ? t('booking.slot.remaining', { count: slot.remaining })
+                        : t('booking.slot.full')
+                  }}
+                </small>
               </label>
             </div>
-            <p v-if="hasSelectedSpot && slots.length === 0 && !apiError" class="visitor-form__hint visitor-form__hint--warning">
+            <p v-if="hasSelectedSpot && selectedDateSlots.length === 0 && !apiError" class="visitor-form__hint visitor-form__hint--warning">
               {{ t('booking.slotsEmpty') }}
+            </p>
+            <p v-else-if="hasSelectedSpot && selectableSlotsForSelectedDate.length === 0 && !apiError" class="visitor-form__hint visitor-form__hint--warning">
+              {{ pickLocalized(text('该日期暂无可选择时段，请切换其他日期。', 'No selectable slots on this date. Try another date.', 'この日は選択可能な時間帯がありません。別の日付を選んでください。', '이 날짜에는 선택 가능한 시간대가 없습니다. 다른 날짜를 선택하세요.')) }}
             </p>
             <p v-if="apiError" class="visitor-form__hint visitor-form__hint--warning">{{ apiError }}</p>
           </section>
@@ -686,7 +839,12 @@ onMounted(() => {
               </label>
               <label :class="{ 'has-warning': !visitorCountIsValid }">
                 <span>{{ t('booking.visitors') }}</span>
-                <input v-model.number="visitorCount" type="number" min="1" max="8" />
+                <input
+                  v-model.number="visitorCount"
+                  type="number"
+                  :min="BOOKING_VISITOR_LIMITS.min"
+                  :max="BOOKING_VISITOR_LIMITS.max"
+                />
               </label>
             </div>
             <p class="visitor-form__hint">
@@ -1085,6 +1243,206 @@ onMounted(() => {
   background: rgba(16, 20, 18, 0.08);
 }
 
+.booking-date-picker {
+  grid-column: 1 / -1;
+  position: relative;
+  background: rgba(250, 247, 240, 0.94);
+}
+
+.booking-date-picker__toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  border: 0;
+  background: rgba(250, 247, 240, 0.96);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 18px;
+  text-align: left;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.booking-date-picker__toggle:hover,
+.booking-date-picker__toggle:focus-visible {
+  background: rgba(232, 239, 233, 0.96);
+  color: var(--deep-green);
+  outline: none;
+}
+
+.booking-date-picker__label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.booking-date-picker__label small,
+.booking-date-picker__head p,
+.slot-options__header small {
+  color: rgba(16, 20, 18, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.booking-date-picker__label strong {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+}
+
+.booking-date-picker__chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(31, 58, 52, 0.16);
+  color: var(--deep-green);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.booking-date-picker__panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 10px);
+  left: 0;
+  width: min(640px, 100%);
+  padding: 18px;
+  border: 1px solid rgba(16, 20, 18, 0.1);
+  background: rgba(250, 247, 240, 0.98);
+  box-shadow: 0 22px 70px rgba(31, 58, 52, 0.16);
+}
+
+.booking-date-picker__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.booking-date-picker__head h3 {
+  margin-top: 6px;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+.booking-date-picker__close {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(16, 20, 18, 0.12);
+  background: transparent;
+  color: rgba(16, 20, 18, 0.58);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.booking-date-picker__close:hover,
+.booking-date-picker__close:focus-visible {
+  color: var(--deep-green);
+  outline: none;
+}
+
+.booking-date-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid rgba(16, 20, 18, 0.08);
+  background: rgba(16, 20, 18, 0.08);
+}
+
+.booking-date-picker__day {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 138px;
+  min-width: 0;
+  border: 0;
+  background: rgba(250, 247, 240, 0.98);
+  color: rgba(16, 20, 18, 0.62);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 12px 10px;
+  text-align: left;
+  transition: background 180ms ease, color 180ms ease, opacity 180ms ease;
+}
+
+.booking-date-picker__day:hover,
+.booking-date-picker__day:focus-visible,
+.booking-date-picker__day.is-selected {
+  background: rgba(232, 239, 233, 0.96);
+  color: var(--deep-green);
+  outline: none;
+}
+
+.booking-date-picker__day.is-unavailable {
+  background: rgba(244, 239, 230, 0.72);
+  color: rgba(16, 20, 18, 0.32);
+}
+
+.booking-date-picker__day span,
+.booking-date-picker__day small,
+.booking-date-picker__day em {
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+}
+
+.booking-date-picker__day strong {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+.booking-date-picker__day em {
+  margin-top: auto;
+  color: rgba(16, 20, 18, 0.48);
+}
+
+.booking-date-picker__day.is-unavailable em,
+.booking-date-picker__day.is-unavailable strong {
+  color: rgba(16, 20, 18, 0.3);
+}
+
+.slot-options__header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  background: rgba(250, 247, 240, 0.92);
+}
+
+.slot-options__header p {
+  color: rgba(16, 20, 18, 0.66);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+.booking-date-picker-enter-active,
+.booking-date-picker-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.booking-date-picker-enter-from,
+.booking-date-picker-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
 .booking-option,
 .slot-option,
 .payment-option {
@@ -1355,6 +1713,18 @@ onMounted(() => {
   .booking-hero__back {
     justify-self: start;
   }
+
+  .booking-date-picker__panel {
+    width: 100%;
+  }
+
+  .booking-date-picker__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .booking-date-picker__day {
+    min-height: 118px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1370,10 +1740,43 @@ onMounted(() => {
   .booking-option,
   .slot-option,
   .payment-option,
+  .slot-options__header,
   .booking-summary div,
   .booking-success div {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .booking-date-picker__toggle {
+    align-items: start;
+  }
+
+  .booking-date-picker__label strong {
+    font-size: 21px;
+  }
+
+  .booking-date-picker__panel {
+    position: fixed;
+    top: auto;
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    width: auto;
+    max-height: calc(100vh - 28px);
+    overflow: auto;
+    padding: 16px;
+  }
+
+  .booking-date-picker__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .booking-date-picker__day {
+    min-height: 112px;
+  }
+
+  .slot-options__header {
+    align-items: start;
   }
 
   .booking-summary dd,

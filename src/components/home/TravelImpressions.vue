@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ArchiveHeader from '../common/ArchiveHeader.vue'
-import { travelImpressions } from '../../data/archive'
+import { travelImpressions } from '../../content/archive'
 import { pickLocalized, t } from '../../i18n/site'
 </script>
 

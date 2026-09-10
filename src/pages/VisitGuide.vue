@@ -11,7 +11,7 @@ import {
   visitGuideSteps,
   visitGuideSupport,
   visitGuideTransport,
-} from '../data/visitGuide'
+} from '../content/visitGuide'
 import { pickLocalized, t } from '../i18n/site'
 </script>
 

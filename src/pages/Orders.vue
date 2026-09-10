@@ -9,14 +9,22 @@ import type {
   BookingCompanion,
   BookingInvoiceStatus,
   BookingOrder,
-  BookingOrderStatus,
   BookingRefundStatus,
   BookingVoucherChannel,
-} from '../data/mockOrders'
+} from '../types/booking'
 import type { LocalizedText } from '../i18n/site'
 import { pickLocalized, t } from '../i18n/site'
 import { fetchOrders, updateOrderStatus } from '../services/api'
 import { ensureCatalog, scenicSpots } from '../stores/catalog'
+import {
+  countOrdersByStatus,
+  filterOrdersByStatus,
+  isPendingOrder,
+  ORDER_STATUS,
+  ORDER_STATUS_ALL,
+  ORDER_STATUS_OPTIONS,
+  type OrderStatusFilter,
+} from '../utils/bookingOrders'
 import {
   localizeOrderSpotName,
   localizeOrderStatus,
@@ -33,23 +41,19 @@ const text = (zh: string, en: string, ja: string, ko: string): LocalizedText => 
 })
 
 const orders = ref<BookingOrder[]>([])
-const selectedStatus = ref<'全部' | BookingOrderStatus>('全部')
+const selectedStatus = ref<OrderStatusFilter>(ORDER_STATUS_ALL)
 const apiError = ref('')
-const statusOptions: Array<'全部' | BookingOrderStatus> = ['全部', '待出行', '已完成', '已取消']
+const statusOptions: OrderStatusFilter[] = [ORDER_STATUS_ALL, ...ORDER_STATUS_OPTIONS]
 const serviceNotes = ref<Record<string, string>>({})
 const deliveredOverrides = ref<Record<string, BookingVoucherChannel[]>>({})
 const invoiceOverrides = ref<Record<string, { status: BookingInvoiceStatus; summary: string }>>({})
 const appealOverrides = ref<Record<string, { status: BookingAppealStatus; summary: string }>>({})
 const { goBack } = useSmartBack('/scenic-spots')
 
-const filteredOrders = computed(() =>
-  selectedStatus.value === '全部'
-    ? orders.value
-    : orders.value.filter((order) => order.status === selectedStatus.value),
-)
+const filteredOrders = computed(() => filterOrdersByStatus(orders.value, selectedStatus.value))
 
 const overviewCards = computed(() => {
-  const pendingCount = orders.value.filter((order) => order.status === '待出行').length
+  const pendingCount = countOrdersByStatus(orders.value, ORDER_STATUS.pending)
   const refundingCount = orders.value.filter((order) => getRefundStatus(order) === '退款中').length
   const deliveredCount = orders.value.filter((order) => getVoucherChannels(order).length >= 2).length
 
@@ -101,7 +105,7 @@ const pushDeliveredChannel = (orderId: string, channel: BookingVoucherChannel) =
 }
 
 const cancelOrder = async (order: BookingOrder) => {
-  if (order.status !== '待出行') return
+  if (!isPendingOrder(order)) return
 
   const promptText = pickLocalized(
     text(
@@ -119,7 +123,7 @@ const cancelOrder = async (order: BookingOrder) => {
   }
 
   try {
-    await updateOrderStatus(order.id, '已取消', reason.trim() || undefined)
+    await updateOrderStatus(order.id, ORDER_STATUS.canceled, reason.trim() || undefined)
     await refreshOrders()
     setServiceNote(order.id, '已受理取消申请，退款与凭证状态已同步更新。')
   } catch (error) {
@@ -400,11 +404,11 @@ onMounted(() => {
           @click="selectedStatus = status"
         >
           {{
-            status === '全部'
+            status === ORDER_STATUS_ALL
               ? t('orders.filter.all')
-              : status === '待出行'
+              : status === ORDER_STATUS.pending
                 ? t('orders.filter.pending')
-                : status === '已完成'
+                : status === ORDER_STATUS.completed
                   ? t('orders.filter.done')
                   : t('orders.filter.canceled')
           }}
@@ -552,7 +556,7 @@ onMounted(() => {
             <RouterLink :to="getSpotDetailTarget(order.spotName)">{{ t('common.viewSpotDetail') }}</RouterLink>
             <RouterLink :to="getBookAgainTarget(order.spotName)">{{ t('orders.bookAgain') }}</RouterLink>
             <button
-              v-if="order.status === '待出行'"
+              v-if="isPendingOrder(order)"
               type="button"
               @click="cancelOrder(order)"
             >
