@@ -1,3 +1,7 @@
+/**
+ * Bundled demo data for static hosting (for example, GitHub Pages).
+ * This file contains public prototype content only; no backend database or secrets.
+ */
 export const userAccounts = [
   {
     id: 'user-admin',
@@ -5,7 +9,6 @@ export const userAccounts = [
     displayName: '景区运营管理员',
     role: '管理员',
     status: '启用',
-    passwordHash: 'sha256-demo:56760663',
     phoneMasked: '138****2026',
     createdAt: '2026-04-01 09:00',
     lastLoginAt: '2026-06-09 08:42',
@@ -17,7 +20,6 @@ export const userAccounts = [
     displayName: '票务核销员',
     role: '管理员',
     status: '启用',
-    passwordHash: 'sha256-demo:56760663',
     phoneMasked: '137****0616',
     createdAt: '2026-04-08 14:20',
     lastLoginAt: '2026-06-08 17:10',
@@ -29,7 +31,6 @@ export const userAccounts = [
     displayName: '普通游客账号',
     role: '普通用户',
     status: '启用',
-    passwordHash: 'sha256-demo:56760663',
     phoneMasked: '136****0909',
     createdAt: '2026-04-16 19:32',
     lastLoginAt: '2026-06-01 12:05',
@@ -489,10 +490,10 @@ export const todayInHangzhou = () => {
 }
 
 const baseDate = new Date(`${todayInHangzhou()}T00:00:00+08:00`)
-const toDateString = (offset) => {
+const toDateString = (offset: number) => {
   const date = new Date(baseDate)
   date.setDate(baseDate.getDate() + offset)
-  const pad = (value) => String(value).padStart(2, '0')
+  const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 

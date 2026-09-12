@@ -12,14 +12,17 @@ import type {
 } from '../types/booking'
 import type { AuditLog, AuthUser, LoginCredentials, RegisterPayload, UserAccount, UserRole, UserStatus } from '../types/security'
 import { buildOperationsPayload } from '../utils/operations'
+import { handleDemoRequest } from './demoApi'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api').replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 let authToken = ''
 export const setAuthToken = (token: string) => { authToken = token }
 export const getAuthToken = () => authToken
 
 const remoteJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  if (!API_BASE_URL) return handleDemoRequest<T>(path, init, authToken)
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {

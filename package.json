@@ -5,9 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:full": "node scripts/dev-full.mjs",
-    "server": "node server/index.mjs",
-    "test:auth": "node test/auth-flow.mjs",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },

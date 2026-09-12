@@ -16,7 +16,8 @@ const assetUrlByPublicPath = Object.fromEntries(
 )
 
 const apiOrigin = (() => {
-  const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api').replace(/\/$/, '')
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  if (!baseUrl) return ''
   try {
     return new URL(baseUrl).origin
   } catch {
@@ -28,7 +29,7 @@ export const getScenicSpotImage = (spot?: Pick<ApiScenicSpot, 'imageUrl'> | null
   const imageUrl = spot?.imageUrl?.trim()
   if (!imageUrl) return null
   if (imageUrl.startsWith('/src/assets/images/')) return assetUrlByPublicPath[imageUrl] ?? null
-  if (imageUrl.startsWith('/uploads/')) return `${apiOrigin}${imageUrl}`
+  if (imageUrl.startsWith('/uploads/')) return apiOrigin ? `${apiOrigin}${imageUrl}` : null
   return imageUrl
 }
 

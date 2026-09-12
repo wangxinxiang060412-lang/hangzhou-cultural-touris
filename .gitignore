@@ -16,6 +16,17 @@ data/*.sqlite-*
 output
 .playwright-cli
 
+# Local backend and database (never publish with the frontend repository)
+server/
+database/
+data/
+render.yaml
+scripts/dev-full.mjs
+test/
+docs/backend-api.md
+docs/database-design.md
+docs/superpowers/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
